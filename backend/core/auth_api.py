@@ -2,6 +2,7 @@ from ninja import Router, Schema
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout, get_user_model
+from core.jwt_utils import criar_token
 
 User = get_user_model()
 
@@ -29,14 +30,14 @@ def login_usuario(request, data: LoginSchema):
     if user is None:
         return {"success": False, "message": "Usuário ou senha inválidos."}
 
-    login(request, user)
+    token = criar_token(user)
 
     return {
         "success": True,
         "message": "Login realizado com sucesso.",
+        "token": token,
         "user": {
             "id": user.id,
-            "username": user.username,
             "email": user.email,
         }
     }
@@ -79,11 +80,12 @@ def cadastrar_usuario(request, data: CadastroSchema):
         password=data.password
     )
 
-    login(request, user)
+    token = criar_token(user)
 
     return {
         "success": True,
         "message": "Conta criada com sucesso.",
+        "token": token,
         "user": {
             "id": user.id,
             "email": user.email,

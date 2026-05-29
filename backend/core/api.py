@@ -2,6 +2,7 @@ from ninja import Router
 from typing import List
 from ninja import Schema
 from core.models import Partida, Palpite
+from core.jwt_utils import obter_usuario_request
 
 router = Router()
 
@@ -16,7 +17,9 @@ class PalpiteSchema(Schema):
 
 @router.post("/palpites")
 def criar_palpite(request, data: PalpiteSchema):
-    if not request.user.is_authenticated:
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
         return {
             "success": False,
             "message": "Você precisa estar logado."
@@ -25,7 +28,7 @@ def criar_palpite(request, data: PalpiteSchema):
     partida = Partida.objects.get(id=data.partida_id)
 
     palpite, created = Palpite.objects.update_or_create(
-        usuario=request.user,
+        usuario=usuario,
         partida=partida,
         defaults={
             "gols_casa": data.gols_casa,
