@@ -243,11 +243,20 @@ function Dashboard({ setTela, onLogout }) {
 }
 
 function CardJogo({ jogo, token }) {
-  const [golsCasa, setGolsCasa] = useState("");
-  const [golsFora, setGolsFora] = useState("");
-  const [mensagem, setMensagem] = useState("");
+  const [golsCasa, setGolsCasa] = useState(
+    jogo.palpite ? String(jogo.palpite.gols_casa) : ""
+  );
+
+  const [golsFora, setGolsFora] = useState(
+    jogo.palpite ? String(jogo.palpite.gols_fora) : ""
+  );
+
+  const [bloqueado, setBloqueado] = useState(!!jogo.palpite);
+  // const [mensagem, setMensagem] = useState("");
+    const [mensagem, setMensagem] = useState(
+    jogo.palpite ? "Palpite já registrado." : ""
+  );
   const [salvando, setSalvando] = useState(false);
-  const [bloqueado, setBloqueado] = useState(false);
 
   async function salvarPalpite() {
     if (golsCasa === "" || golsFora === "") {
@@ -357,12 +366,43 @@ function Jogos({ setTela, onLogout, token }) {
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/core/partidas`)
-      .then((res) => res.json())
-      .then((data) => setPartidas(data))
-      .catch((error) => console.log(error))
-      .finally(() => setCarregando(false));
-  }, []);
+    async function carregarDados() {
+      try {
+        const [resPartidas, resPalpites] = await Promise.all([
+          fetch(`${API_URL}/core/partidas`),
+          fetch(`${API_URL}/core/meus-palpites`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+        ]);
+
+        const partidasData = await resPartidas.json();
+        const palpitesData = await resPalpites.json();
+
+        const palpitesPorPartida = {};
+
+        if (palpitesData.success) {
+          palpitesData.palpites.forEach((palpite) => {
+            palpitesPorPartida[palpite.partida_id] = palpite;
+          });
+        }
+
+        const partidasComPalpite = partidasData.map((jogo) => ({
+          ...jogo,
+          palpite: palpitesPorPartida[jogo.id] || null,
+        }));
+
+        setPartidas(partidasComPalpite);
+      } catch (error) {
+        console.log(error);
+      } finally {
+        setCarregando(false);
+      }
+    }
+
+    carregarDados();
+  }, [token]);
 
   return (
     <View style={styles.page}>
