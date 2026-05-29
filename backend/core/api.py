@@ -27,13 +27,17 @@ def criar_palpite(request, data: PalpiteSchema):
 
     partida = Partida.objects.get(id=data.partida_id)
 
-    palpite, created = Palpite.objects.update_or_create(
+    if Palpite.objects.filter(usuario=usuario, partida=partida).exists():
+        return {
+            "success": False,
+            "message": "Você já fez um palpite para este jogo e não pode editar."
+        }
+
+    palpite = Palpite.objects.create(
         usuario=usuario,
         partida=partida,
-        defaults={
-            "gols_casa": data.gols_casa,
-            "gols_fora": data.gols_fora,
-        }
+        gols_casa=data.gols_casa,
+        gols_fora=data.gols_fora,
     )
 
     return {
