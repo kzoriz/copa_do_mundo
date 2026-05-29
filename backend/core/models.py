@@ -1,0 +1,94 @@
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+class Grupo(models.Model):
+    nome = models.CharField(max_length=20, unique=True)
+
+    class Meta:
+        ordering = ["nome"]
+
+    def __str__(self):
+        return self.nome
+
+
+class Fase(models.Model):
+    nome = models.CharField(max_length=50, unique=True)
+    ordem = models.PositiveIntegerField(unique=True)
+
+    class Meta:
+        ordering = ["ordem"]
+
+    def __str__(self):
+        return self.nome
+
+
+class Rodada(models.Model):
+    fase = models.ForeignKey(Fase, on_delete=models.CASCADE, related_name="rodadas")
+    nome = models.CharField(max_length=50)
+    ordem = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["fase__ordem", "ordem"]
+        unique_together = ("fase", "ordem")
+
+    def __str__(self):
+        return f"{self.fase} - {self.nome}"
+
+
+class Time(models.Model):
+    nome = models.CharField(max_length=100, unique=True)
+    sigla = models.CharField(max_length=5, unique=True)
+
+    def __str__(self):
+        return self.nome
+
+
+class Partida(models.Model):
+    fase = models.ForeignKey(Fase, on_delete=models.PROTECT, related_name="partidas")
+    rodada = models.ForeignKey(
+        Rodada,
+        on_delete=models.PROTECT,
+        related_name="partidas",
+        null=True,
+        blank=True
+    )
+    grupo = models.ForeignKey(
+        Grupo,
+        on_delete=models.CASCADE,
+        related_name="partidas",
+        null=True,
+        blank=True
+    )
+
+    numero_jogo = models.PositiveIntegerField(null=True, blank=True)
+    time_casa = models.ForeignKey(Time, on_delete=models.CASCADE, related_name="partidas_casa")
+    time_fora = models.ForeignKey(Time, on_delete=models.CASCADE, related_name="partidas_fora")
+    data_jogo = models.DateTimeField()
+    estadio = models.CharField(max_length=150, blank=True)
+
+    gols_casa = models.IntegerField(null=True, blank=True)
+    gols_fora = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["data_jogo"]
+        unique_together = ("time_casa", "time_fora", "data_jogo")
+
+    def __str__(self):
+        return f"{self.time_casa} x {self.time_fora}"
+
+
+class Palpite(models.Model):
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name="palpites")
+    partida = models.ForeignKey(Partida, on_delete=models.CASCADE, related_name="palpites")
+    gols_casa = models.IntegerField()
+    gols_fora = models.IntegerField()
+    pontos = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ("usuario", "partida")
+
+    def __str__(self):
+        return f"{self.usuario.username} - {self.partida}"
