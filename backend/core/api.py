@@ -74,3 +74,34 @@ def listar_partidas(request):
         }
         for p in partidas
     ]
+
+@router.get("/meus-palpites")
+def meus_palpites(request):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {
+            "success": False,
+            "message": "Você precisa estar logado."
+        }
+
+    palpites = Palpite.objects.select_related(
+        "partida",
+        "partida__time_casa",
+        "partida__time_fora",
+    ).filter(usuario=usuario)
+
+    return {
+        "success": True,
+        "palpites": [
+            {
+                "id": p.id,
+                "partida_id": p.partida.id,
+                "gols_casa": p.gols_casa,
+                "gols_fora": p.gols_fora,
+                "time_casa": p.partida.time_casa.nome,
+                "time_fora": p.partida.time_fora.nome,
+            }
+            for p in palpites
+        ]
+    }
