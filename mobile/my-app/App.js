@@ -62,6 +62,9 @@ function Login({ setTela, setToken, setUsuario }) {
       const data = await response.json();
 
       if (data.success) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("usuario", JSON.stringify(data.user));
+
         setToken(data.token);
         setUsuario(data.user);
         setTela("dashboard");
@@ -143,6 +146,9 @@ function Cadastro({ setTela, setToken, setUsuario }) {
       const data = await response.json();
 
     if (data.success) {
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("usuario", JSON.stringify(data.user));
+
       setToken(data.token);
       setUsuario(data.user);
       setTela("dashboard");
@@ -426,20 +432,25 @@ function Perfil({ setTela, onLogout }) {
 export default function App() {
   const [tela, setTela] = useState("home");
   const [token, setToken] = useState(null);
-  const [usuario, setUsuario] = useState(null);
-async function fazerLogout() {
-  try {
-    await fetch(`${API_URL}/auth/logout`, {
-      method: "POST",
-    });
-  } catch (error) {
-    console.log(error);
-  }
+  useEffect(() => {
+    const tokenSalvo = localStorage.getItem("token");
+    const usuarioSalvo = localStorage.getItem("usuario");
 
-  setToken(null);
-  setUsuario(null);
-  setTela("home");
-}
+    if (tokenSalvo && usuarioSalvo) {
+      setToken(tokenSalvo);
+      setUsuario(JSON.parse(usuarioSalvo));
+      setTela("dashboard");
+    }
+  }, []);
+  const [usuario, setUsuario] = useState(null);
+  async function fazerLogout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("usuario");
+
+    setToken(null);
+    setUsuario(null);
+    setTela("home");
+  }
 
   if (tela === "login") {
   return (
