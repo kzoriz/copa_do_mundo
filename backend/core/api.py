@@ -5,6 +5,7 @@ from core.models import Partida, Palpite
 from core.jwt_utils import obter_usuario_request
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
+from django.db import models
 
 User = get_user_model()
 
@@ -124,10 +125,23 @@ def meus_palpites(request):
 def ranking(request):
     usuarios = User.objects.annotate(
         total_pontos=Sum("palpites__pontos"),
-        total_palpites=Count("palpites")
+        total_palpites=Count("palpites"),
+        total_placares_exatos=Count(
+            "palpites",
+            filter=models.Q(palpites__placar_exato=True)
+        ),
+        total_vencedores_corretos=Count(
+            "palpites",
+            filter=models.Q(palpites__vencedor_correto=True)
+        ),
     ).filter(
         total_palpites__gt=0
-    ).order_by("-total_pontos", "-total_palpites")
+    ).order_by(
+        "-total_pontos",
+        "-total_placares_exatos",
+        "-total_vencedores_corretos",
+        "date_joined",
+    )
 
     return {
         "success": True,
@@ -137,6 +151,8 @@ def ranking(request):
                 "usuario": user.email or user.username,
                 "pontos": user.total_pontos or 0,
                 "palpites": user.total_palpites,
+                "placares_exatos": user.total_placares_exatos,
+                "vencedores_corretos": user.total_vencedores_corretos,
             }
             for index, user in enumerate(usuarios)
         ]
@@ -171,7 +187,7 @@ def salvar_resultado_oficial(request, data: ResultadoOficialSchema):
 
     for palpite in partida.palpites.all():
         palpite.pontos = palpite.calcular_pontos()
-        palpite.save(update_fields=["pontos"])
+        palpite.save(update_fields=["pontos", "placar_exato", "vencedor_correto"])
 
     return {
         "success": True,

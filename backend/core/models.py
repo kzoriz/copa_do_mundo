@@ -87,6 +87,9 @@ class Palpite(models.Model):
     gols_fora = models.IntegerField()
     pontos = models.IntegerField(default=0)
 
+    placar_exato = models.BooleanField(default=False)
+    vencedor_correto = models.BooleanField(default=False)
+
     class Meta:
         unique_together = ("usuario", "partida")
 
@@ -96,22 +99,30 @@ class Palpite(models.Model):
     def calcular_pontos(self):
         partida = self.partida
 
+        self.placar_exato = False
+        self.vencedor_correto = False
+
         if partida.gols_casa is None or partida.gols_fora is None:
             return 0
 
         if self.gols_casa == partida.gols_casa and self.gols_fora == partida.gols_fora:
+            self.placar_exato = True
+            self.vencedor_correto = True
             return 5
 
         resultado_real = partida.gols_casa - partida.gols_fora
         resultado_palpite = self.gols_casa - self.gols_fora
 
         if resultado_real == 0 and resultado_palpite == 0:
+            self.vencedor_correto = True
             return 3
 
         if resultado_real > 0 and resultado_palpite > 0:
+            self.vencedor_correto = True
             return 3
 
         if resultado_real < 0 and resultado_palpite < 0:
+            self.vencedor_correto = True
             return 3
 
         return 0

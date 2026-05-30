@@ -659,6 +659,13 @@ function Ranking({ setTela, onLogout }) {
       .finally(() => setCarregando(false));
   }, []);
 
+  function medalha(posicao) {
+    if (posicao === 1) return "🥇";
+    if (posicao === 2) return "🥈";
+    if (posicao === 3) return "🥉";
+    return `${posicao}º`;
+  }
+
   return (
     <View style={styles.page}>
       <Header titulo="Ranking" onLogout={onLogout} />
@@ -668,21 +675,51 @@ function Ranking({ setTela, onLogout }) {
           <Text style={styles.link}>← Voltar ao painel</Text>
         </Pressable>
 
-        <Text style={styles.title}>Ranking</Text>
+        <Text style={styles.title}>Ranking Geral</Text>
+        <Text style={styles.subtitle}>
+          Veja quem está liderando o bolão da Copa
+        </Text>
 
         {carregando ? (
           <ActivityIndicator size="large" />
         ) : ranking.length === 0 ? (
-          <Text style={styles.subtitle}>Ainda não há participantes no ranking.</Text>
+          <Text style={styles.subtitle}>
+            Ainda não há participantes no ranking.
+          </Text>
         ) : (
           ranking.map((item) => (
-            <View key={item.posicao} style={styles.card}>
-              <Text style={styles.cardTitle}>
-                {item.posicao}º lugar — {item.usuario}
-              </Text>
+            <View key={item.posicao} style={styles.rankingCard}>
+              <View style={styles.rankingPosition}>
+                <Text style={styles.rankingMedal}>
+                  {medalha(item.posicao)}
+                </Text>
+              </View>
 
-              <Text style={styles.cardText}>Pontos: {item.pontos}</Text>
-              <Text style={styles.cardText}>Palpites: {item.palpites}</Text>
+              <View style={styles.rankingInfo}>
+                <Text style={styles.rankingUser}>
+                  {item.usuario}
+                </Text>
+
+                <Text style={styles.rankingDetails}>
+                  {item.palpites} palpites registrados
+                </Text>
+                <Text style={styles.rankingDetails}>
+                  🎯 {item.placares_exatos} placares exatos
+                </Text>
+
+                <Text style={styles.rankingDetails}>
+                  ✅ {item.vencedores_corretos} vencedores corretos
+                </Text>
+              </View>
+
+              <View style={styles.rankingPointsBox}>
+                <Text style={styles.rankingPoints}>
+                  {item.pontos}
+                </Text>
+                <Text style={styles.rankingPointsLabel}>
+                  pts
+                </Text>
+              </View>
             </View>
           ))
         )}
@@ -1004,4 +1041,68 @@ const styles = StyleSheet.create({
   disabledButton: {
   backgroundColor: "#94A3B8",
   },
+  rankingCard: {
+  width: "100%",
+  maxWidth: 560,
+  backgroundColor: "#FFFFFF",
+  padding: 16,
+  borderRadius: 16,
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: "#E2E8F0",
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 12,
+},
+
+rankingPosition: {
+  width: 48,
+  height: 48,
+  borderRadius: 24,
+  backgroundColor: "#F1F5F9",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+rankingMedal: {
+  fontSize: 24,
+  fontWeight: "bold",
+},
+
+rankingInfo: {
+  flex: 1,
+},
+
+rankingUser: {
+  fontSize: 16,
+  fontWeight: "bold",
+  color: "#0F172A",
+},
+
+rankingDetails: {
+  marginTop: 4,
+  color: "#64748B",
+  fontSize: 14,
+},
+
+rankingPointsBox: {
+  minWidth: 70,
+  backgroundColor: "#E0F2FE",
+  borderRadius: 12,
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  alignItems: "center",
+},
+
+rankingPoints: {
+  fontSize: 22,
+  fontWeight: "bold",
+  color: "#0369A1",
+},
+
+rankingPointsLabel: {
+  fontSize: 12,
+  color: "#0369A1",
+  fontWeight: "bold",
+},
 });

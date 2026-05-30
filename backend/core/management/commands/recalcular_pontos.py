@@ -10,7 +10,7 @@ class Command(BaseCommand):
 
         for palpite in Palpite.objects.select_related("partida"):
             palpite.pontos = palpite.calcular_pontos()
-            palpite.save(update_fields=["pontos"])
+            palpite.save(update_fields=["pontos", "placar_exato", "vencedor_correto"])
             total += 1
 
         self.stdout.write(
