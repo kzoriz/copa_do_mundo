@@ -211,7 +211,7 @@ function Cadastro({ setTela, setToken, setUsuario }) {
   );
 }
 
-function Dashboard({ setTela, onLogout, usuario })  {
+function Dashboard({ setTela, onLogout, usuario, setFaseSelecionada, setGrupoSelecionado })  {
   return (
     <View style={styles.page}>
       <Header titulo="Copa 2026" onLogout={onLogout} />
@@ -231,7 +231,11 @@ function Dashboard({ setTela, onLogout, usuario })  {
           <Text style={styles.cardMenuTitle}>Meus Palpites</Text>
           <Text style={styles.cardMenuText}>Veja os palpites que você já registrou</Text>
         </Pressable>
-        <Pressable style={styles.cardMenu} onPress={() => setTela("jogos")}>
+        <Pressable style={styles.cardMenu} onPress={() => {
+            setFaseSelecionada(null);
+            setGrupoSelecionado(null);
+            setTela("fases");
+          }}>
           <Text style={styles.cardIcon}>⚽</Text>
           <Text style={styles.cardMenuTitle}>Jogos</Text>
           <Text style={styles.cardMenuText}>Veja partidas e registre palpites</Text>
@@ -374,7 +378,56 @@ function CardJogo({ jogo, token }) {
   );
 }
 
-function Jogos({ setTela, onLogout, token }) {
+
+function Fases({ setTela, onLogout, setFaseSelecionada }) {
+  const fases = [
+    "Fase de Grupos",
+    "16 Avos de Final",
+    "Oitavas de Final",
+    "Quartas de Final",
+    "Semifinal",
+    "Disputa do 3º Lugar",
+    "Final",
+  ];
+
+  function abrirFase(fase) {
+    setFaseSelecionada(fase);
+
+    if (fase === "Fase de Grupos") {
+      setTela("grupos");
+    } else {
+      setTela("jogos");
+    }
+  }
+
+  return (
+    <View style={styles.page}>
+      <Header titulo="Fases" onLogout={onLogout} />
+
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Pressable onPress={() => setTela("dashboard")}>
+          <Text style={styles.link}>← Voltar ao painel</Text>
+        </Pressable>
+
+        <Text style={styles.title}>Fases da Copa</Text>
+
+        {fases.map((fase) => (
+          <Pressable
+            key={fase}
+            style={styles.cardMenu}
+            onPress={() => abrirFase(fase)}
+          >
+            <Text style={styles.cardIcon}>🏆</Text>
+            <Text style={styles.cardMenuTitle}>{fase}</Text>
+            <Text style={styles.cardMenuText}>Ver jogos desta fase</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function Jogos({ setTela, onLogout, token, faseSelecionada, grupoSelecionado }) {
   const [partidas, setPartidas] = useState([]);
   const [carregando, setCarregando] = useState(true);
 
@@ -417,23 +470,121 @@ function Jogos({ setTela, onLogout, token }) {
     carregarDados();
   }, [token]);
 
+  let partidasFiltradas = partidas;
+
+  if (faseSelecionada) {
+    partidasFiltradas = partidasFiltradas.filter(
+      (jogo) => jogo.fase === faseSelecionada
+    );
+  }
+
+  if (grupoSelecionado) {
+    partidasFiltradas = partidasFiltradas.filter(
+      (jogo) => jogo.grupo === grupoSelecionado
+    );
+  }
+
   return (
     <View style={styles.page}>
       <Header titulo="Jogos" onLogout={onLogout} />
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Pressable onPress={() => setTela("dashboard")}>
-          <Text style={styles.link}>← Voltar ao painel</Text>
+        <Pressable
+          onPress={() => {
+            if (faseSelecionada === "Fase de Grupos") {
+              setTela("grupos");
+            } else {
+              setTela("fases");
+            }
+          }}
+        >
+          <Text style={styles.link}>← Voltar</Text>
         </Pressable>
 
-        <Text style={styles.title}>Jogos da Copa</Text>
+        <Text style={styles.title}>
+          {grupoSelecionado || faseSelecionada || "Jogos da Copa"}
+        </Text>
+
+        <Text style={styles.subtitle}>
+          Registre seus palpites para os jogos selecionados
+        </Text>
+
+        {carregando ? (
+          <ActivityIndicator size="large" />
+        ) : partidasFiltradas.length === 0 ? (
+          <Text style={styles.subtitle}>
+            Nenhum jogo encontrado para esta seleção.
+          </Text>
+        ) : (
+          partidasFiltradas.map((jogo) => (
+            <CardJogo key={jogo.id} jogo={jogo} token={token} />
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function Grupos({ setTela, onLogout, setGrupoSelecionado }) {
+  const [partidas, setPartidas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_URL}/core/partidas`)
+      .then((res) => res.json())
+      .then((data) => setPartidas(data))
+      .catch((error) => console.log(error))
+      .finally(() => setCarregando(false));
+  }, []);
+
+  const grupos = {};
+
+  partidas
+    .filter((jogo) => jogo.fase === "Fase de Grupos")
+    .forEach((jogo) => {
+      if (!grupos[jogo.grupo]) {
+        grupos[jogo.grupo] = new Set();
+      }
+
+      grupos[jogo.grupo].add(jogo.time_casa);
+      grupos[jogo.grupo].add(jogo.time_fora);
+    });
+
+  return (
+    <View style={styles.page}>
+      <Header titulo="Grupos" onLogout={onLogout} />
+
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Pressable onPress={() => setTela("fases")}>
+          <Text style={styles.link}>← Voltar às fases</Text>
+        </Pressable>
+
+        <Text style={styles.title}>Fase de Grupos</Text>
 
         {carregando ? (
           <ActivityIndicator size="large" />
         ) : (
-          partidas.map((jogo) => (
-            <CardJogo key={jogo.id} jogo={jogo} token={token} />
-          ))
+          Object.keys(grupos)
+            .sort()
+            .map((grupo) => (
+              <Pressable
+                key={grupo}
+                style={styles.cardMenu}
+                onPress={() => {
+                  setGrupoSelecionado(grupo);
+                  setTela("jogos");
+                }}
+              >
+                <Text style={styles.cardIcon}>🌎</Text>
+                <Text style={styles.cardMenuTitle}>{grupo}</Text>
+
+                {[...grupos[grupo]].map((time) => (
+                  <Text key={time} style={styles.cardMenuText}>
+                    • {time}
+                  </Text>
+                ))}
+              </Pressable>
+            ))
         )}
       </ScrollView>
     </View>
@@ -728,7 +879,26 @@ function Ranking({ setTela, onLogout }) {
   );
 }
 
-function Perfil({ setTela, onLogout }) {
+function Perfil({ setTela, onLogout, token }) {
+  const [perfil, setPerfil] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_URL}/core/perfil`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setPerfil(data.perfil);
+        }
+      })
+      .catch((error) => console.log(error))
+      .finally(() => setCarregando(false));
+  }, [token]);
+
   return (
     <View style={styles.page}>
       <Header titulo="Perfil" onLogout={onLogout} />
@@ -738,17 +908,25 @@ function Perfil({ setTela, onLogout }) {
           <Text style={styles.link}>← Voltar ao painel</Text>
         </Pressable>
 
-        <View style={styles.profileCard}>
-          <Text style={styles.profileIcon}>👤</Text>
-          <Text style={styles.title}>Meu Perfil</Text>
+        {carregando ? (
+          <ActivityIndicator size="large" />
+        ) : (
+          <View style={styles.profileCard}>
+            <Text style={styles.profileIcon}>👤</Text>
+            <Text style={styles.title}>Meu Perfil</Text>
 
-          <Text style={styles.profileInfo}>Palpites realizados: 0</Text>
-          <Text style={styles.profileInfo}>Pontuação atual: 0 pts</Text>
+            <Text style={styles.profileInfo}>E-mail: {perfil?.email}</Text>
+            <Text style={styles.profileInfo}>Pontos: {perfil?.pontos}</Text>
+            <Text style={styles.profileInfo}>Palpites: {perfil?.palpites}</Text>
+            <Text style={styles.profileInfo}>Placares exatos: {perfil?.placares_exatos}</Text>
+            <Text style={styles.profileInfo}>Vencedores corretos: {perfil?.vencedores_corretos}</Text>
+            <Text style={styles.profileInfo}>Taxa de acerto: {perfil?.taxa_acerto}%</Text>
 
-          <Pressable style={styles.dangerButton} onPress={onLogout}>
-            <Text style={styles.buttonText}>Sair da conta</Text>
-          </Pressable>
-        </View>
+            <Pressable style={styles.dangerButton} onPress={onLogout}>
+              <Text style={styles.buttonText}>Sair da conta</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -757,6 +935,10 @@ function Perfil({ setTela, onLogout }) {
 export default function App() {
   const [tela, setTela] = useState("home");
   const [token, setToken] = useState(null);
+  const [usuario, setUsuario] = useState(null);
+  const [faseSelecionada, setFaseSelecionada] = useState(null);
+  const [grupoSelecionado, setGrupoSelecionado] = useState(null);
+
   useEffect(() => {
     const tokenSalvo = localStorage.getItem("token");
     const usuarioSalvo = localStorage.getItem("usuario");
@@ -767,7 +949,6 @@ export default function App() {
       setTela("dashboard");
     }
   }, []);
-  const [usuario, setUsuario] = useState(null);
   async function fazerLogout() {
     localStorage.removeItem("token");
     localStorage.removeItem("usuario");
@@ -796,10 +977,43 @@ export default function App() {
       );
     }
   if (tela === "dashboard") {
-    return <Dashboard setTela={setTela} onLogout={fazerLogout} usuario={usuario} />;
+    return <Dashboard
+      setTela={setTela}
+      onLogout={fazerLogout}
+      usuario={usuario}
+      setFaseSelecionada={setFaseSelecionada}
+      setGrupoSelecionado={setGrupoSelecionado}
+    />;
+  }
+  if (tela === "fases") {
+    return (
+      <Fases
+        setTela={setTela}
+        onLogout={fazerLogout}
+        setFaseSelecionada={setFaseSelecionada}
+      />
+    );
+  }
+
+  if (tela === "grupos") {
+    return (
+      <Grupos
+        setTela={setTela}
+        onLogout={fazerLogout}
+        setGrupoSelecionado={setGrupoSelecionado}
+      />
+    );
   }
   if (tela === "jogos") {
-    return <Jogos setTela={setTela} onLogout={fazerLogout} token={token} />;
+    return (
+      <Jogos
+        setTela={setTela}
+        onLogout={fazerLogout}
+        token={token}
+        faseSelecionada={faseSelecionada}
+        grupoSelecionado={grupoSelecionado}
+      />
+    );
   }
   if (tela === "meusPalpites") {
     return (
@@ -823,7 +1037,7 @@ export default function App() {
     return <Ranking setTela={setTela} onLogout={fazerLogout} />;
   }
   if (tela === "perfil") {
-    return <Perfil setTela={setTela} onLogout={fazerLogout} />;
+    return <Perfil setTela={setTela} onLogout={fazerLogout} token={token} />;
   }
 
   return <Home setTela={setTela} />;
@@ -1104,5 +1318,32 @@ rankingPointsLabel: {
   fontSize: 12,
   color: "#0369A1",
   fontWeight: "bold",
+},
+section: {
+  width: "100%",
+  maxWidth: 620,
+  marginTop: 20,
+},
+
+sectionTitle: {
+  fontSize: 26,
+  fontWeight: "bold",
+  color: "#0F172A",
+  marginBottom: 16,
+  borderBottomWidth: 2,
+  borderBottomColor: "#0391CF",
+  paddingBottom: 8,
+},
+
+groupSection: {
+  width: "100%",
+  marginBottom: 20,
+},
+
+groupTitle: {
+  fontSize: 20,
+  fontWeight: "bold",
+  color: "#0391CF",
+  marginBottom: 12,
 },
 });

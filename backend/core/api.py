@@ -193,3 +193,36 @@ def salvar_resultado_oficial(request, data: ResultadoOficialSchema):
         "success": True,
         "message": "Resultado oficial salvo com sucesso."
     }
+
+@router.get("/perfil")
+def perfil(request):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {
+            "success": False,
+            "message": "Você precisa estar logado."
+        }
+
+    palpites = Palpite.objects.filter(usuario=usuario)
+
+    total_palpites = palpites.count()
+    total_pontos = sum(p.pontos for p in palpites)
+    placares_exatos = palpites.filter(placar_exato=True).count()
+    vencedores_corretos = palpites.filter(vencedor_correto=True).count()
+
+    taxa_acerto = 0
+    if total_palpites > 0:
+        taxa_acerto = round((vencedores_corretos / total_palpites) * 100, 1)
+
+    return {
+        "success": True,
+        "perfil": {
+            "email": usuario.email,
+            "pontos": total_pontos,
+            "palpites": total_palpites,
+            "placares_exatos": placares_exatos,
+            "vencedores_corretos": vencedores_corretos,
+            "taxa_acerto": taxa_acerto,
+        }
+    }
