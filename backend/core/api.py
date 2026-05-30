@@ -3,6 +3,10 @@ from typing import List
 from ninja import Schema
 from core.models import Partida, Palpite
 from core.jwt_utils import obter_usuario_request
+from django.db.models import Sum, Count
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 router = Router()
 
@@ -114,4 +118,62 @@ def meus_palpites(request):
             }
             for p in palpites
         ]
+    }
+
+@router.get("/ranking")
+def ranking(request):
+    usuarios = User.objects.annotate(
+        total_pontos=Sum("palpites__pontos"),
+        total_palpites=Count("palpites")
+    ).filter(
+        total_palpites__gt=0
+    ).order_by("-total_pontos", "-total_palpites")
+
+    return {
+        "success": True,
+        "ranking": [
+            {
+                "posicao": index + 1,
+                "usuario": user.email or user.username,
+                "pontos": user.total_pontos or 0,
+                "palpites": user.total_palpites,
+            }
+            for index, user in enumerate(usuarios)
+        ]
+    }
+
+class ResultadoOficialSchema(Schema):
+    partida_id: int
+    gols_casa: int
+    gols_fora: int
+
+
+@router.post("/resultado-oficial")
+def salvar_resultado_oficial(request, data: ResultadoOficialSchema):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {
+            "success": False,
+            "message": "Você precisa estar logado."
+        }
+
+    if not usuario.is_staff and not usuario.is_superuser:
+        return {
+            "success": False,
+            "message": "Você não tem permissão para cadastrar resultados."
+        }
+
+    partida = Partida.objects.get(id=data.partida_id)
+    partida.gols_casa = data.gols_casa
+    partida.gols_fora = data.gols_fora
+    partida.save(update_fields=["gols_casa", "gols_fora"])
+
+    for palpite in partida.palpites.all():
+        palpite.pontos = palpite.calcular_pontos()
+        palpite.save(update_fields=["pontos"])
+
+    return {
+        "success": True,
+        "message": "Resultado oficial salvo com sucesso."
     }

@@ -39,7 +39,10 @@ def login_usuario(request, data: LoginSchema):
         "user": {
             "id": user.id,
             "email": user.email,
+            "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
         }
+        
     }
 
 
@@ -89,5 +92,7 @@ def cadastrar_usuario(request, data: CadastroSchema):
         "user": {
             "id": user.id,
             "email": user.email,
+            "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
         }
     }

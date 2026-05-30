@@ -211,7 +211,7 @@ function Cadastro({ setTela, setToken, setUsuario }) {
   );
 }
 
-function Dashboard({ setTela, onLogout }) {
+function Dashboard({ setTela, onLogout, usuario })  {
   return (
     <View style={styles.page}>
       <Header titulo="Copa 2026" onLogout={onLogout} />
@@ -219,6 +219,13 @@ function Dashboard({ setTela, onLogout }) {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Text style={styles.title}>Painel Principal</Text>
         <Text style={styles.subtitle}>Escolha uma opção para continuar</Text>
+        {usuario?.is_staff || usuario?.is_superuser ? (
+          <Pressable style={styles.cardMenu} onPress={() => setTela("adminResultados")}>
+            <Text style={styles.cardIcon}>🛠️</Text>
+            <Text style={styles.cardMenuTitle}>Administração</Text>
+            <Text style={styles.cardMenuText}>Cadastrar resultados oficiais</Text>
+          </Pressable>
+        ) : null}
         <Pressable style={styles.cardMenu} onPress={() => setTela("meusPalpites")}>
           <Text style={styles.cardIcon}>📋</Text>
           <Text style={styles.cardMenuTitle}>Meus Palpites</Text>
@@ -496,7 +503,162 @@ function MeusPalpites({ setTela, onLogout, token }) {
   );
 }
 
+function AdminResultados({ setTela, onLogout, token }) {
+  const [partidas, setPartidas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_URL}/core/partidas`)
+      .then((res) => res.json())
+      .then((data) => setPartidas(data))
+      .catch((error) => console.log(error))
+      .finally(() => setCarregando(false));
+  }, []);
+
+  return (
+    <View style={styles.page}>
+      <Header titulo="Administração" onLogout={onLogout} />
+
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Pressable onPress={() => setTela("dashboard")}>
+          <Text style={styles.link}>← Voltar ao painel</Text>
+        </Pressable>
+
+        <Text style={styles.title}>Resultados Oficiais</Text>
+
+        {carregando ? (
+          <ActivityIndicator size="large" />
+        ) : (
+          partidas.map((jogo) => (
+            <CardResultadoAdmin key={jogo.id} jogo={jogo} token={token} />
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function CardResultadoAdmin({ jogo, token }) {
+  const [golsCasa, setGolsCasa] = useState(
+    jogo.gols_casa !== null ? String(jogo.gols_casa) : ""
+  );
+  const [golsFora, setGolsFora] = useState(
+    jogo.gols_fora !== null ? String(jogo.gols_fora) : ""
+  );
+  const [mensagem, setMensagem] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvarResultado() {
+    if (golsCasa === "" || golsFora === "") {
+      setMensagem("Informe o resultado completo.");
+      return;
+    }
+
+    setSalvando(true);
+    setMensagem("");
+
+    try {
+      const response = await fetch(`${API_URL}/core/resultado-oficial`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          partida_id: jogo.id,
+          gols_casa: Number(golsCasa),
+          gols_fora: Number(golsFora),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMensagem("Resultado salvo e pontos recalculados.");
+      } else {
+        setMensagem(data.message || "Erro ao salvar resultado.");
+      }
+    } catch (error) {
+      console.log(error);
+      setMensagem("Erro ao conectar com o servidor.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.badge}>
+        Jogo {jogo.numero_jogo} • {jogo.fase} • {jogo.grupo}
+      </Text>
+
+      <Text style={styles.cardTitle}>
+        {jogo.time_casa} x {jogo.time_fora}
+      </Text>
+
+      <Text style={styles.cardText}>Rodada: {jogo.rodada}</Text>
+      <Text style={styles.cardText}>
+        Data: {new Date(jogo.data_jogo).toLocaleString("pt-BR")}
+      </Text>
+      <Text style={styles.cardText}>Local: {jogo.estadio}</Text>
+
+      <View style={styles.palpiteRow}>
+        <Text style={styles.teamName}>{jogo.time_casa}</Text>
+
+        <TextInput
+          style={styles.scoreInput}
+          value={golsCasa}
+          onChangeText={setGolsCasa}
+          keyboardType="numeric"
+          placeholder="0"
+          placeholderTextColor="#94A3B8"
+        />
+
+        <Text style={styles.xText}>x</Text>
+
+        <TextInput
+          style={styles.scoreInput}
+          value={golsFora}
+          onChangeText={setGolsFora}
+          keyboardType="numeric"
+          placeholder="0"
+          placeholderTextColor="#94A3B8"
+        />
+
+        <Text style={styles.teamName}>{jogo.time_fora}</Text>
+      </View>
+
+      {mensagem ? <Text style={styles.message}>{mensagem}</Text> : null}
+
+      <Pressable
+        style={[styles.button, salvando && styles.disabledButton]}
+        onPress={salvarResultado}
+        disabled={salvando}
+      >
+        <Text style={styles.buttonText}>
+          {salvando ? "Salvando..." : "Salvar resultado oficial"}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function Ranking({ setTela, onLogout }) {
+  const [ranking, setRanking] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_URL}/core/ranking`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setRanking(data.ranking);
+        }
+      })
+      .catch((error) => console.log(error))
+      .finally(() => setCarregando(false));
+  }, []);
+
   return (
     <View style={styles.page}>
       <Header titulo="Ranking" onLogout={onLogout} />
@@ -507,7 +669,23 @@ function Ranking({ setTela, onLogout }) {
         </Pressable>
 
         <Text style={styles.title}>Ranking</Text>
-        <Text style={styles.subtitle}>Em breve: classificação dos participantes.</Text>
+
+        {carregando ? (
+          <ActivityIndicator size="large" />
+        ) : ranking.length === 0 ? (
+          <Text style={styles.subtitle}>Ainda não há participantes no ranking.</Text>
+        ) : (
+          ranking.map((item) => (
+            <View key={item.posicao} style={styles.card}>
+              <Text style={styles.cardTitle}>
+                {item.posicao}º lugar — {item.usuario}
+              </Text>
+
+              <Text style={styles.cardText}>Pontos: {item.pontos}</Text>
+              <Text style={styles.cardText}>Palpites: {item.palpites}</Text>
+            </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -581,7 +759,7 @@ export default function App() {
       );
     }
   if (tela === "dashboard") {
-    return <Dashboard setTela={setTela} onLogout={fazerLogout} />;
+    return <Dashboard setTela={setTela} onLogout={fazerLogout} usuario={usuario} />;
   }
   if (tela === "jogos") {
     return <Jogos setTela={setTela} onLogout={fazerLogout} token={token} />;
@@ -589,6 +767,15 @@ export default function App() {
   if (tela === "meusPalpites") {
     return (
       <MeusPalpites
+        setTela={setTela}
+        onLogout={fazerLogout}
+        token={token}
+      />
+    );
+  }
+  if (tela === "adminResultados") {
+    return (
+      <AdminResultados
         setTela={setTela}
         onLogout={fazerLogout}
         token={token}

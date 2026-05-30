@@ -92,3 +92,26 @@ class Palpite(models.Model):
 
     def __str__(self):
         return f"{self.usuario.username} - {self.partida}"
+
+    def calcular_pontos(self):
+        partida = self.partida
+
+        if partida.gols_casa is None or partida.gols_fora is None:
+            return 0
+
+        if self.gols_casa == partida.gols_casa and self.gols_fora == partida.gols_fora:
+            return 5
+
+        resultado_real = partida.gols_casa - partida.gols_fora
+        resultado_palpite = self.gols_casa - self.gols_fora
+
+        if resultado_real == 0 and resultado_palpite == 0:
+            return 3
+
+        if resultado_real > 0 and resultado_palpite > 0:
+            return 3
+
+        if resultado_real < 0 and resultado_palpite < 0:
+            return 3
+
+        return 0
