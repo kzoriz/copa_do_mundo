@@ -228,3 +228,85 @@ def perfil(request):
             "taxa_acerto": taxa_acerto,
         }
     }
+
+@router.get("/classificacao-grupo/{grupo_nome}")
+def classificacao_grupo(request, grupo_nome: str):
+    partidas = Partida.objects.select_related(
+        "grupo", "time_casa", "time_fora"
+    ).filter(
+        grupo__nome=grupo_nome
+    )
+
+    tabela = {}
+
+    def garantir_time(time):
+        if time.id not in tabela:
+            tabela[time.id] = {
+                "time": time.nome,
+                "pontos": 0,
+                "jogos": 0,
+                "vitorias": 0,
+                "empates": 0,
+                "derrotas": 0,
+                "gols_pro": 0,
+                "gols_contra": 0,
+                "saldo": 0,
+            }
+
+    for partida in partidas:
+        garantir_time(partida.time_casa)
+        garantir_time(partida.time_fora)
+
+        if partida.gols_casa is None or partida.gols_fora is None:
+            continue
+
+        casa = tabela[partida.time_casa.id]
+        fora = tabela[partida.time_fora.id]
+
+        casa["jogos"] += 1
+        fora["jogos"] += 1
+
+        casa["gols_pro"] += partida.gols_casa
+        casa["gols_contra"] += partida.gols_fora
+
+        fora["gols_pro"] += partida.gols_fora
+        fora["gols_contra"] += partida.gols_casa
+
+        if partida.gols_casa > partida.gols_fora:
+            casa["pontos"] += 3
+            casa["vitorias"] += 1
+            fora["derrotas"] += 1
+        elif partida.gols_casa < partida.gols_fora:
+            fora["pontos"] += 3
+            fora["vitorias"] += 1
+            casa["derrotas"] += 1
+        else:
+            casa["pontos"] += 1
+            fora["pontos"] += 1
+            casa["empates"] += 1
+            fora["empates"] += 1
+
+    for item in tabela.values():
+        item["saldo"] = item["gols_pro"] - item["gols_contra"]
+
+    classificacao = sorted(
+        tabela.values(),
+        key=lambda x: (
+            -x["pontos"],
+            -x["saldo"],
+            -x["gols_pro"],
+            x["time"],
+        )
+    )
+
+    return {
+        "success": True,
+        "grupo": grupo_nome,
+        "classificacao": [
+            {
+                "posicao": index + 1,
+                **item,
+            }
+            for index, item in enumerate(classificacao)
+        ]
+    }

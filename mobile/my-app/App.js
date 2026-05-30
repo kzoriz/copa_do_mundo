@@ -10,7 +10,7 @@ import {
   Image,
 } from "react-native";
 
-const API_URL = "http://127.0.0.1:8000/api";
+const API_URL = "http://192.168.0.17:8000/api";
 
 function Header({ titulo, onLogout }) {
   return (
@@ -48,7 +48,7 @@ function Login({ setTela, setToken, setUsuario }) {
 
   async function fazerLogin() {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/auth/login", {
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -437,6 +437,59 @@ function Fases({ setTela, onLogout, setFaseSelecionada }) {
   );
 }
 
+function ClassificacaoGrupo({ grupoSelecionado }) {
+  const [classificacao, setClassificacao] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    if (!grupoSelecionado) return;
+
+    fetch(`${API_URL}/core/classificacao-grupo/${encodeURIComponent(grupoSelecionado)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setClassificacao(data.classificacao);
+        }
+      })
+      .catch((error) => console.log(error))
+      .finally(() => setCarregando(false));
+  }, [grupoSelecionado]);
+
+  if (!grupoSelecionado) return null;
+
+  return (
+    <View style={styles.tableCard}>
+      <Text style={styles.tableTitle}>Classificação - {grupoSelecionado}</Text>
+
+      {carregando ? (
+        <ActivityIndicator size="small" />
+      ) : (
+        <>
+          <View style={styles.tableHeader}>
+            <Text style={styles.colPos}>#</Text>
+            <Text style={styles.colTeam}>Time</Text>
+            <Text style={styles.col}>Pts</Text>
+            <Text style={styles.col}>J</Text>
+            <Text style={styles.col}>SG</Text>
+            <Text style={styles.col}>GP</Text>
+          </View>
+
+          {classificacao.map((item) => (
+            <View key={item.time} style={styles.tableRow}>
+              <Text style={styles.colPos}>{item.posicao}</Text>
+              <Text style={styles.colTeam}>{item.time}</Text>
+              <Text style={styles.col}>{item.pontos}</Text>
+              <Text style={styles.col}>{item.jogos}</Text>
+              <Text style={styles.col}>{item.saldo}</Text>
+              <Text style={styles.col}>{item.gols_pro}</Text>
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  );
+}
+
 function Jogos({ setTela, onLogout, token, faseSelecionada, grupoSelecionado }) {
   const [partidas, setPartidas] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -518,7 +571,9 @@ function Jogos({ setTela, onLogout, token, faseSelecionada, grupoSelecionado }) 
         <Text style={styles.subtitle}>
           Registre seus palpites para os jogos selecionados
         </Text>
-
+        {grupoSelecionado ? (
+          <ClassificacaoGrupo grupoSelecionado={grupoSelecionado} />
+        ) : null}
         {carregando ? (
           <ActivityIndicator size="large" />
         ) : partidasFiltradas.length === 0 ? (
@@ -553,11 +608,11 @@ function Grupos({ setTela, onLogout, setGrupoSelecionado }) {
     .filter((jogo) => jogo.fase === "Fase de Grupos")
     .forEach((jogo) => {
       if (!grupos[jogo.grupo]) {
-        grupos[jogo.grupo] = new Set();
+        grupos[jogo.grupo] = {};
       }
 
-      grupos[jogo.grupo].add(jogo.time_casa);
-      grupos[jogo.grupo].add(jogo.time_fora);
+      grupos[jogo.grupo][jogo.time_casa] = jogo.time_casa_bandeira;
+      grupos[jogo.grupo][jogo.time_fora] = jogo.time_fora_bandeira;
     });
 
   return (
@@ -585,13 +640,19 @@ function Grupos({ setTela, onLogout, setGrupoSelecionado }) {
                   setTela("jogos");
                 }}
               >
-                <Text style={styles.cardIcon}>🌎</Text>
+                <Text style={styles.cardIcon}></Text>
                 <Text style={styles.cardMenuTitle}>{grupo}</Text>
 
-                {[...grupos[grupo]].map((time) => (
-                  <Text key={time} style={styles.cardMenuText}>
-                    • {time}
-                  </Text>
+                {Object.entries(grupos[grupo]).map(([time, bandeira]) => (
+                  <View key={time} style={styles.groupTeamRow}>
+                    {bandeira ? (
+                      <Image source={{ uri: bandeira }} style={styles.groupFlag} />
+                    ) : (
+                      <View style={styles.groupFlagPlaceholder} />
+                    )}
+
+                    <Text style={styles.cardMenuText}>{time}</Text>
+                  </View>
                 ))}
               </Pressable>
             ))
@@ -1383,4 +1444,74 @@ vsText: {
   fontWeight: "bold",
   color: "#0F172A",
 },
+
+  groupTeamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+  groupFlag: {
+    width: 32,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  groupFlagPlaceholder: {
+    width: 32,
+    height: 22,
+    borderRadius: 4,
+    backgroundColor: "#E2E8F0",
+  },
+  tableCard: {
+    width: "100%",
+    maxWidth: 560,
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  tableTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#0F172A",
+    marginBottom: 12,
+  },
+
+  tableHeader: {
+    flexDirection: "row",
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+
+  tableRow: {
+    flexDirection: "row",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+
+  colPos: {
+    width: 32,
+    fontWeight: "bold",
+    color: "#475569",
+  },
+
+  colTeam: {
+    flex: 1,
+    fontWeight: "bold",
+    color: "#0F172A",
+  },
+
+  col: {
+    width: 38,
+    textAlign: "center",
+    color: "#475569",
+  },
 });
