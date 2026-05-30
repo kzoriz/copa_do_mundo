@@ -87,9 +87,12 @@ def meus_palpites(request):
 
     palpites = Palpite.objects.select_related(
         "partida",
+        "partida__fase",
+        "partida__rodada",
+        "partida__grupo",
         "partida__time_casa",
         "partida__time_fora",
-    ).filter(usuario=usuario)
+    ).filter(usuario=usuario).order_by("partida__data_jogo")
 
     return {
         "success": True,
@@ -97,10 +100,17 @@ def meus_palpites(request):
             {
                 "id": p.id,
                 "partida_id": p.partida.id,
-                "gols_casa": p.gols_casa,
-                "gols_fora": p.gols_fora,
+                "numero_jogo": p.partida.numero_jogo,
+                "fase": p.partida.fase.nome if p.partida.fase else None,
+                "rodada": p.partida.rodada.nome if p.partida.rodada else None,
+                "grupo": p.partida.grupo.nome if p.partida.grupo else None,
                 "time_casa": p.partida.time_casa.nome,
                 "time_fora": p.partida.time_fora.nome,
+                "data_jogo": p.partida.data_jogo,
+                "estadio": p.partida.estadio,
+                "gols_casa": p.gols_casa,
+                "gols_fora": p.gols_fora,
+                "pontos": p.pontos,
             }
             for p in palpites
         ]

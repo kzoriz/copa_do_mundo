@@ -219,7 +219,11 @@ function Dashboard({ setTela, onLogout }) {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Text style={styles.title}>Painel Principal</Text>
         <Text style={styles.subtitle}>Escolha uma opção para continuar</Text>
-
+        <Pressable style={styles.cardMenu} onPress={() => setTela("meusPalpites")}>
+          <Text style={styles.cardIcon}>📋</Text>
+          <Text style={styles.cardMenuTitle}>Meus Palpites</Text>
+          <Text style={styles.cardMenuText}>Veja os palpites que você já registrou</Text>
+        </Pressable>
         <Pressable style={styles.cardMenu} onPress={() => setTela("jogos")}>
           <Text style={styles.cardIcon}>⚽</Text>
           <Text style={styles.cardMenuTitle}>Jogos</Text>
@@ -322,6 +326,7 @@ function CardJogo({ jogo, token }) {
           onChangeText={setGolsCasa}
           keyboardType="numeric"
           placeholder="0"
+          placeholderTextColor="#94A3B8"
           editable={!bloqueado}
         />
 
@@ -333,6 +338,7 @@ function CardJogo({ jogo, token }) {
           onChangeText={setGolsFora}
           keyboardType="numeric"
           placeholder="0"
+          placeholderTextColor="#94A3B8"
           editable={!bloqueado}
         />
 
@@ -426,6 +432,70 @@ function Jogos({ setTela, onLogout, token }) {
     </View>
   );
 }
+
+function MeusPalpites({ setTela, onLogout, token }) {
+  const [palpites, setPalpites] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_URL}/core/meus-palpites`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setPalpites(data.palpites);
+        }
+      })
+      .catch((error) => console.log(error))
+      .finally(() => setCarregando(false));
+  }, [token]);
+
+  return (
+    <View style={styles.page}>
+      <Header titulo="Meus Palpites" onLogout={onLogout} />
+
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Pressable onPress={() => setTela("dashboard")}>
+          <Text style={styles.link}>← Voltar ao painel</Text>
+        </Pressable>
+
+        <Text style={styles.title}>Meus Palpites</Text>
+
+        {carregando ? (
+          <ActivityIndicator size="large" />
+        ) : palpites.length === 0 ? (
+          <Text style={styles.subtitle}>Você ainda não registrou palpites.</Text>
+        ) : (
+          palpites.map((palpite) => (
+            <View key={palpite.id} style={styles.card}>
+              <Text style={styles.badge}>
+                Jogo {palpite.numero_jogo} • {palpite.fase} • {palpite.grupo}
+              </Text>
+
+              <Text style={styles.cardTitle}>
+                {palpite.time_casa} {palpite.gols_casa} x {palpite.gols_fora} {palpite.time_fora}
+              </Text>
+
+              <Text style={styles.cardText}>Rodada: {palpite.rodada}</Text>
+
+              <Text style={styles.cardText}>
+                Data: {new Date(palpite.data_jogo).toLocaleString("pt-BR")}
+              </Text>
+
+              <Text style={styles.cardText}>Local: {palpite.estadio}</Text>
+
+              <Text style={styles.cardText}>Pontos: {palpite.pontos}</Text>
+            </View>
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
 function Ranking({ setTela, onLogout }) {
   return (
     <View style={styles.page}>
@@ -515,6 +585,15 @@ export default function App() {
   }
   if (tela === "jogos") {
     return <Jogos setTela={setTela} onLogout={fazerLogout} token={token} />;
+  }
+  if (tela === "meusPalpites") {
+    return (
+      <MeusPalpites
+        setTela={setTela}
+        onLogout={fazerLogout}
+        token={token}
+      />
+    );
   }
   if (tela === "ranking") {
     return <Ranking setTela={setTela} onLogout={fazerLogout} />;
