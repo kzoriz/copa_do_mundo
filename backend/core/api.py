@@ -72,6 +72,8 @@ def listar_partidas(request):
             "grupo": p.grupo.nome if p.grupo else None,
             "time_casa": p.time_casa.nome,
             "time_fora": p.time_fora.nome,
+            "time_casa_bandeira": request.build_absolute_uri(p.time_casa.bandeira.url) if p.time_casa.bandeira else None,
+            "time_fora_bandeira": request.build_absolute_uri(p.time_fora.bandeira.url) if p.time_fora.bandeira else None,
             "data_jogo": p.data_jogo,
             "estadio": p.estadio,
             "gols_casa": p.gols_casa,

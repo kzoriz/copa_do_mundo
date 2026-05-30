@@ -41,6 +41,11 @@ class Rodada(models.Model):
 class Time(models.Model):
     nome = models.CharField(max_length=100, unique=True)
     sigla = models.CharField(max_length=5, unique=True)
+    bandeira = models.ImageField(
+        upload_to="bandeiras/",
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return self.nome

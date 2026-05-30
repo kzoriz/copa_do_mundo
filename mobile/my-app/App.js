@@ -7,6 +7,7 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from "react-native";
 
 const API_URL = "http://127.0.0.1:8000/api";
@@ -267,8 +268,7 @@ function CardJogo({ jogo, token }) {
   );
 
   const [bloqueado, setBloqueado] = useState(!!jogo.palpite);
-  // const [mensagem, setMensagem] = useState("");
-    const [mensagem, setMensagem] = useState(
+  const [mensagem, setMensagem] = useState(
     jogo.palpite ? "Palpite já registrado." : ""
   );
   const [salvando, setSalvando] = useState(false);
@@ -318,9 +318,23 @@ function CardJogo({ jogo, token }) {
         {jogo.grupo} • {jogo.rodada}
       </Text>
 
-      <Text style={styles.cardTitle}>
-        {jogo.time_casa} x {jogo.time_fora}
-      </Text>
+      <View style={styles.matchHeader}>
+        <View style={styles.teamBox}>
+          {jogo.time_casa_bandeira ? (
+            <Image source={{ uri: jogo.time_casa_bandeira }} style={styles.flag} />
+          ) : null}
+          <Text style={styles.teamName}>{jogo.time_casa}</Text>
+        </View>
+
+        <Text style={styles.vsText}>x</Text>
+
+        <View style={styles.teamBox}>
+          {jogo.time_fora_bandeira ? (
+            <Image source={{ uri: jogo.time_fora_bandeira }} style={styles.flag} />
+          ) : null}
+          <Text style={styles.teamName}>{jogo.time_fora}</Text>
+        </View>
+      </View>
 
       <Text style={styles.cardText}>🏟️ {jogo.estadio}</Text>
 
@@ -329,8 +343,6 @@ function CardJogo({ jogo, token }) {
       </Text>
 
       <View style={styles.palpiteRow}>
-        <Text style={styles.teamName}>{jogo.time_casa}</Text>
-
         <TextInput
           style={styles.scoreInput}
           value={golsCasa}
@@ -352,8 +364,6 @@ function CardJogo({ jogo, token }) {
           placeholderTextColor="#94A3B8"
           editable={!bloqueado}
         />
-
-        <Text style={styles.teamName}>{jogo.time_fora}</Text>
       </View>
 
       {mensagem ? <Text style={styles.message}>{mensagem}</Text> : null}
@@ -1345,5 +1355,32 @@ groupTitle: {
   fontWeight: "bold",
   color: "#0391CF",
   marginBottom: 12,
+},
+  matchHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 12,
+  gap: 12,
+},
+
+teamBox: {
+  flex: 1,
+  alignItems: "center",
+},
+
+flag: {
+  width: 42,
+  height: 28,
+  borderRadius: 4,
+  marginBottom: 6,
+  borderWidth: 1,
+  borderColor: "#E2E8F0",
+},
+
+vsText: {
+  fontSize: 18,
+  fontWeight: "bold",
+  color: "#0F172A",
 },
 });

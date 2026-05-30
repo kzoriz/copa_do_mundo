@@ -9,7 +9,7 @@ admin.site.register(Rodada)
 
 @admin.register(Time)
 class TimeAdmin(admin.ModelAdmin):
-    list_display = ("id", "nome", "sigla")
+    list_display = ("id", "nome", "sigla", "bandeira")
     search_fields = ("nome", "sigla")
 
 
@@ -33,3 +33,4 @@ class PartidaAdmin(admin.ModelAdmin):
 @admin.register(Palpite)
 class PalpiteAdmin(admin.ModelAdmin):
     list_display = ("id", "usuario", "partida", "gols_casa", "gols_fora", "pontos")
+
