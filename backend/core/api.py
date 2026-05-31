@@ -1,7 +1,7 @@
 from ninja import Router
 from typing import List
 from ninja import Schema
-from core.models import Partida, Palpite, Grupo, Fase
+from core.models import Partida, Palpite, Grupo, Fase, Time
 from core.jwt_utils import obter_usuario_request
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
@@ -77,6 +77,147 @@ class PalpiteSchema(Schema):
     gols_fora: int
 
 
+class ClassificadoManualSchema(Schema):
+    numero_jogo: int
+    lado: str  # "casa" ou "fora"
+    time_id: int
+
+class DefinirClassificadoManualSchema(Schema):
+    numero_jogo: int
+    lado: str
+    time_id: int
+
+@router.post("/classificado-manual")
+def definir_classificado_manual(request, data: ClassificadoManualSchema):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {
+            "success": False,
+            "message": "Você precisa estar logado."
+        }
+
+    if not usuario.is_staff and not usuario.is_superuser:
+        return {
+            "success": False,
+            "message": "Você não tem permissão para definir classificados."
+        }
+
+    partida = Partida.objects.get(numero_jogo=data.numero_jogo)
+    time = Time.objects.get(id=data.time_id)
+
+    if data.lado == "casa":
+        partida.time_casa = time
+    elif data.lado == "fora":
+        partida.time_fora = time
+    else:
+        return {
+            "success": False,
+            "message": "Lado inválido. Use 'casa' ou 'fora'."
+        }
+
+    partida.save(update_fields=["time_casa", "time_fora"])
+
+    return {
+        "success": True,
+        "message": f"{time.nome} definido manualmente no jogo {partida.numero_jogo}."
+    }
+
+def estatisticas_confronto_direto(grupo, times_ids):
+    partidas = Partida.objects.filter(
+        grupo=grupo,
+        time_casa_id__in=times_ids,
+        time_fora_id__in=times_ids,
+        gols_casa__isnull=False,
+        gols_fora__isnull=False,
+    )
+
+    tabela = {
+        time_id: {
+            "pontos": 0,
+            "saldo": 0,
+            "gols_pro": 0,
+        }
+        for time_id in times_ids
+    }
+
+    for partida in partidas:
+        casa = tabela[partida.time_casa_id]
+        fora = tabela[partida.time_fora_id]
+
+        casa["gols_pro"] += partida.gols_casa
+        fora["gols_pro"] += partida.gols_fora
+
+        casa["saldo"] += partida.gols_casa - partida.gols_fora
+        fora["saldo"] += partida.gols_fora - partida.gols_casa
+
+        if partida.gols_casa > partida.gols_fora:
+            casa["pontos"] += 3
+        elif partida.gols_fora > partida.gols_casa:
+            fora["pontos"] += 3
+        else:
+            casa["pontos"] += 1
+            fora["pontos"] += 1
+
+    return tabela
+
+def ordenar_classificacao_fifa(grupo, tabela):
+    classificacao = list(tabela.values())
+
+    classificacao.sort(
+        key=lambda x: (
+            -x["pontos"],
+            -x["saldo"],
+            -x["gols_pro"],
+            x["time"],
+        )
+    )
+
+    resultado = []
+    i = 0
+
+    while i < len(classificacao):
+        atual = classificacao[i]
+
+        empatados = [atual]
+        j = i + 1
+
+        while j < len(classificacao):
+            proximo = classificacao[j]
+
+            mesmo_empate = (
+                proximo["pontos"] == atual["pontos"]
+                and proximo["saldo"] == atual["saldo"]
+                and proximo["gols_pro"] == atual["gols_pro"]
+            )
+
+            if not mesmo_empate:
+                break
+
+            empatados.append(proximo)
+            j += 1
+
+        if len(empatados) == 1:
+            resultado.extend(empatados)
+        else:
+            ids = [time["time_obj"].id for time in empatados]
+            confronto = estatisticas_confronto_direto(grupo, ids)
+
+            empatados.sort(
+                key=lambda x: (
+                    -confronto[x["time_obj"].id]["pontos"],
+                    -confronto[x["time_obj"].id]["saldo"],
+                    -confronto[x["time_obj"].id]["gols_pro"],
+                    x["time"],
+                )
+            )
+
+            resultado.extend(empatados)
+
+        i = j
+
+    return resultado
+
 def calcular_classificacao_grupo_obj(grupo):
     partidas = Partida.objects.select_related(
         "time_casa",
@@ -135,15 +276,43 @@ def calcular_classificacao_grupo_obj(grupo):
     for item in tabela.values():
         item["saldo"] = item["gols_pro"] - item["gols_contra"]
 
-    return sorted(
-        tabela.values(),
-        key=lambda x: (
-            -x["pontos"],
-            -x["saldo"],
-            -x["gols_pro"],
-            x["time"],
+    classificacao = list(tabela.values())
+
+    grupos_empatados = {}
+
+    for item in classificacao:
+        chave = (
+            item["pontos"],
+            item["saldo"],
+            item["gols_pro"],
         )
-    )
+
+        grupos_empatados.setdefault(chave, []).append(item)
+
+    resultado = []
+
+    for grupo_empate in grupos_empatados.values():
+
+        if len(grupo_empate) == 1:
+            resultado.extend(grupo_empate)
+            continue
+
+        ids = [x["time_obj"].id for x in grupo_empate]
+
+        confronto = estatisticas_confronto_direto(grupo, ids)
+
+        grupo_empate.sort(
+            key=lambda x: (
+                -confronto[x["time_obj"].id]["pontos"],
+                -confronto[x["time_obj"].id]["saldo"],
+                -confronto[x["time_obj"].id]["gols_pro"],
+                x["time"],
+            )
+        )
+
+        resultado.extend(grupo_empate)
+
+    return ordenar_classificacao_fifa(grupo, tabela)
 
 
 def chave_classificacao(item):
@@ -390,10 +559,11 @@ def perfil(request):
 
 @router.get("/classificacao-grupo/{grupo_nome}")
 def classificacao_grupo(request, grupo_nome: str):
+    grupo_obj = Grupo.objects.get(nome=grupo_nome)
     partidas = Partida.objects.select_related(
         "grupo", "time_casa", "time_fora"
     ).filter(
-        grupo__nome=grupo_nome
+        grupo=grupo_obj
     )
 
     tabela = {}
@@ -401,6 +571,7 @@ def classificacao_grupo(request, grupo_nome: str):
     def garantir_time(time):
         if time.id not in tabela:
             tabela[time.id] = {
+                "time_obj": time,
                 "time": time.nome,
                 "pontos": 0,
                 "jogos": 0,
@@ -448,15 +619,7 @@ def classificacao_grupo(request, grupo_nome: str):
     for item in tabela.values():
         item["saldo"] = item["gols_pro"] - item["gols_contra"]
 
-    classificacao = sorted(
-        tabela.values(),
-        key=lambda x: (
-            -x["pontos"],
-            -x["saldo"],
-            -x["gols_pro"],
-            x["time"],
-        )
-    )
+    classificacao = ordenar_classificacao_fifa(grupo=grupo_obj, tabela=tabela)
 
     return {
         "success": True,
@@ -464,7 +627,15 @@ def classificacao_grupo(request, grupo_nome: str):
         "classificacao": [
             {
                 "posicao": index + 1,
-                **item,
+                "time": item["time"],
+                "pontos": item["pontos"],
+                "jogos": item["jogos"],
+                "vitorias": item["vitorias"],
+                "empates": item["empates"],
+                "derrotas": item["derrotas"],
+                "gols_pro": item["gols_pro"],
+                "gols_contra": item["gols_contra"],
+                "saldo": item["saldo"],
             }
             for index, item in enumerate(classificacao)
         ]
@@ -597,3 +768,71 @@ def gerar_16_avos(request):
         "jogos_atualizados": jogos_atualizados,
         "jogos_pendentes": jogos_pendentes,
     }
+
+@router.get("/times")
+def listar_times(request):
+
+    times = Time.objects.order_by("nome")
+
+    return {
+        "success": True,
+        "times": [
+            {
+                "id": t.id,
+                "nome": t.nome,
+                "sigla": t.sigla,
+                "bandeira": (
+                    request.build_absolute_uri(t.bandeira.url)
+                    if t.bandeira else None
+                ),
+            }
+            for t in times
+        ]
+    }
+
+@router.post("/classificado-manual")
+def classificado_manual(
+    request,
+    data: DefinirClassificadoManualSchema
+):
+    usuario = obter_usuario_request(request)
+
+    if not usuario.is_staff and not usuario.is_superuser:
+        return {
+            "success": False,
+            "message": "Sem permissão."
+        }
+
+    try:
+        partida = Partida.objects.get(
+            numero_jogo=data.numero_jogo
+        )
+
+        time = Time.objects.get(
+            id=data.time_id
+        )
+
+        if data.lado == "casa":
+            partida.time_casa = time
+
+        elif data.lado == "fora":
+            partida.time_fora = time
+
+        else:
+            return {
+                "success": False,
+                "message": "Lado inválido."
+            }
+
+        partida.save()
+
+        return {
+            "success": True,
+            "message": "Classificado definido."
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e)
+        }

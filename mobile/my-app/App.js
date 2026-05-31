@@ -8,9 +8,13 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
+  Alert,
+  Modal,
 } from "react-native";
 
 const API_URL = "http://192.168.0.17:8000/api";
+
+
 
 function Header({ titulo, onLogout }) {
   return (
@@ -790,12 +794,111 @@ function AdminResultados({ setTela, onLogout, setAdminFaseSelecionada }) {
     </View>
   );
 }
+
+function ModalClassificadoManual({ visible, times, onClose, onSelect }) {
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Selecionar classificado</Text>
+
+          <ScrollView>
+            {times.map((time) => (
+              <Pressable
+                key={time.id}
+                style={styles.modalItem}
+                onPress={() => onSelect(time)}
+              >
+                <Text style={styles.modalItemText}>
+                  {time.sigla} - {time.nome}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <Pressable style={styles.secondaryButton} onPress={onClose}>
+            <Text style={styles.secondaryButtonText}>Cancelar</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
   const [partidas, setPartidas] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
   const [grupoSelecionadoAdmin, setGrupoSelecionadoAdmin] = useState(null);
   const [ladoSelecionado, setLadoSelecionado] = useState(null);
+  const [times, setTimes] = useState([]);
+  const [modalClassificado, setModalClassificado] = useState(false);
+  const [jogoSelecionado, setJogoSelecionado] = useState(null);
+  const [ladoClassificado, setLadoClassificado] = useState(null);
+
+  async function carregarPartidas() {
+    setCarregando(true);
+
+    try {
+      const response = await fetch(`${API_URL}/core/partidas`);
+      const data = await response.json();
+      setPartidas(data);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setCarregando(false);
+    }
+  }
+  async function carregarTimes() {
+    try {
+      const response = await fetch(`${API_URL}/core/times`);
+      const data = await response.json();
+
+      if (data.success) {
+        setTimes(data.times);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  function abrirModalClassificado(jogo, lado) {
+    setJogoSelecionado(jogo);
+    setLadoClassificado(lado);
+    setModalClassificado(true);
+  }
+
+  async function definirClassificadoManual(time) {
+    try {
+      const response = await fetch(`${API_URL}/core/classificado-manual`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          numero_jogo: jogoSelecionado.numero_jogo,
+          lado: ladoClassificado,
+          time_id: time.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        window.alert(data.message || "Classificado definido com sucesso.");
+        setModalClassificado(false);
+        setJogoSelecionado(null);
+        setLadoClassificado(null);
+        carregarPartidas();
+      } else {
+        window.alert(data.message || "Erro ao definir classificado.");
+      }
+    } catch (error) {
+      console.log(error);
+      window.alert("Erro ao conectar com o servidor.");
+    }
+  }
 
   function obterLadoJogo(numeroJogo) {
     const ladoEsquerdo = [73, 74, 75, 76, 77, 78, 79, 80, 89, 90, 91, 92, 97, 98, 101];
@@ -806,12 +909,9 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
     return "final";
   }
 
-  useEffect(() => {
-    fetch(`${API_URL}/core/partidas`)
-      .then((res) => res.json())
-      .then((data) => setPartidas(data))
-      .catch((error) => console.log(error))
-      .finally(() => setCarregando(false));
+   useEffect(() => {
+    carregarPartidas();
+    carregarTimes();
   }, []);
 
   const deveMostrarFiltroLado = [
@@ -993,7 +1093,13 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
               <Text style={styles.subtitle}>Nenhuma partida encontrada.</Text>
             ) : (
               partidasFiltradas.map((jogo) => (
-                <CardResultadoAdmin key={jogo.id} jogo={jogo} token={token} />
+                <CardResultadoAdmin
+                  key={jogo.id}
+                  jogo={jogo}
+                  token={token}
+                  onResultadoSalvo={carregarPartidas}
+                  onDefinirClassificado={abrirModalClassificado}
+                />
               ))
             )}
           </>
@@ -1007,22 +1113,37 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
               <Text style={styles.subtitle}>Nenhuma partida encontrada neste lado.</Text>
             ) : (
               partidasFiltradas.map((jogo) => (
-                <CardResultadoAdmin key={jogo.id} jogo={jogo} token={token} />
+                <CardResultadoAdmin
+                  key={jogo.id}
+                  jogo={jogo}
+                  token={token}
+                  onResultadoSalvo={carregarPartidas}
+                  onDefinirClassificado={abrirModalClassificado}
+                />
               ))
             )}
           </>
         )}
       </ScrollView>
+
+      <ModalClassificadoManual
+        visible={modalClassificado}
+        times={times}
+        onClose={() => setModalClassificado(false)}
+        onSelect={definirClassificadoManual}
+      />
     </View>
   );
 }
-function CardResultadoAdmin({ jogo, token }) {
+function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassificado }) {
   const [golsCasa, setGolsCasa] = useState(
     jogo.gols_casa !== null ? String(jogo.gols_casa) : ""
   );
+
   const [golsFora, setGolsFora] = useState(
     jogo.gols_fora !== null ? String(jogo.gols_fora) : ""
   );
+
   const [mensagem, setMensagem] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -1052,7 +1173,14 @@ function CardResultadoAdmin({ jogo, token }) {
       const data = await response.json();
 
       if (data.success) {
-        setMensagem("Resultado salvo e pontos recalculados.");
+        setMensagem("✅ Resultado salvo e chaveamento atualizado.");
+
+        // Aguarda exibir a mensagem antes de atualizar a lista
+        if (onResultadoSalvo) {
+          setTimeout(() => {
+            onResultadoSalvo();
+          }, 1200);
+        }
       } else {
         setMensagem(data.message || "Erro ao salvar resultado.");
       }
@@ -1067,22 +1195,57 @@ function CardResultadoAdmin({ jogo, token }) {
   return (
     <View style={styles.card}>
       <Text style={styles.badge}>
-        Jogo {jogo.numero_jogo} • {jogo.fase} • {jogo.grupo}
+        Jogo {jogo.numero_jogo} • {jogo.fase}
+        {jogo.grupo ? ` • ${jogo.grupo}` : ""}
       </Text>
 
-      <Text style={styles.cardTitle}>
-        {jogo.time_casa} x {jogo.time_fora}
+      <View style={styles.matchHeader}>
+        <View style={styles.teamBox}>
+          {jogo.time_casa_bandeira ? (
+            <Image
+              source={{ uri: jogo.time_casa_bandeira }}
+              style={styles.flag}
+            />
+          ) : (
+            <View style={styles.flagPlaceholder} />
+          )}
+
+          <Text style={styles.teamName}>
+            {jogo.time_casa || "A definir"}
+          </Text>
+        </View>
+
+        <Text style={styles.vsText}>x</Text>
+
+        <View style={styles.teamBox}>
+          {jogo.time_fora_bandeira ? (
+            <Image
+              source={{ uri: jogo.time_fora_bandeira }}
+              style={styles.flag}
+            />
+          ) : (
+            <View style={styles.flagPlaceholder} />
+          )}
+
+          <Text style={styles.teamName}>
+            {jogo.time_fora || "A definir"}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.cardText}>
+        Rodada: {jogo.rodada || "A definir"}
       </Text>
 
-      <Text style={styles.cardText}>Rodada: {jogo.rodada}</Text>
       <Text style={styles.cardText}>
         Data: {new Date(jogo.data_jogo).toLocaleString("pt-BR")}
       </Text>
-      <Text style={styles.cardText}>Local: {jogo.estadio}</Text>
+
+      <Text style={styles.cardText}>
+        Local: {jogo.estadio}
+      </Text>
 
       <View style={styles.palpiteRow}>
-        <Text style={styles.teamName}>{jogo.time_casa}</Text>
-
         <TextInput
           style={styles.scoreInput}
           value={golsCasa}
@@ -1102,19 +1265,52 @@ function CardResultadoAdmin({ jogo, token }) {
           placeholder="0"
           placeholderTextColor="#94A3B8"
         />
-
-        <Text style={styles.teamName}>{jogo.time_fora}</Text>
       </View>
+      {jogo.time_casa === "A definir" ? (
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => onDefinirClassificado(jogo, "casa")}
+        >
+          <Text style={styles.secondaryButtonText}>
+            Definir mandante manualmente
+          </Text>
+        </Pressable>
+      ) : null}
 
-      {mensagem ? <Text style={styles.message}>{mensagem}</Text> : null}
+      {jogo.time_fora === "A definir" ? (
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => onDefinirClassificado(jogo, "fora")}
+        >
+          <Text style={styles.secondaryButtonText}>
+            Definir visitante manualmente
+          </Text>
+        </Pressable>
+      ) : null}
+      {mensagem ? (
+        <Text
+          style={
+            mensagem.includes("salvo")
+              ? styles.successMessage
+              : styles.message
+          }
+        >
+          {mensagem}
+        </Text>
+      ) : null}
 
       <Pressable
-        style={[styles.button, salvando && styles.disabledButton]}
+        style={[
+          styles.button,
+          salvando && styles.disabledButton,
+        ]}
         onPress={salvarResultado}
         disabled={salvando}
       >
         <Text style={styles.buttonText}>
-          {salvando ? "Salvando..." : "Salvar resultado oficial"}
+          {salvando
+            ? "Salvando..."
+            : "Salvar resultado oficial"}
         </Text>
       </Pressable>
     </View>
@@ -1822,5 +2018,54 @@ vsText: {
 
   filterChipTextActive: {
     color: "#FFFFFF",
+  },
+  flagPlaceholder: {
+    width: 42,
+    height: 28,
+    borderRadius: 4,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F1F5F9",
+  },
+  successMessage: {
+    marginTop: 10,
+    marginBottom: 10,
+    color: "#15803D",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 20,
+  },
+
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: "80%",
+  },
+
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#0F172A",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+
+  modalItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+
+  modalItemText: {
+    fontSize: 16,
+    color: "#0F172A",
+    fontWeight: "bold",
   },
 });
