@@ -26,14 +26,14 @@ def vencedor_partida(partida):
 
 CHAVEAMENTO_MATA_MATA = {
     # Oitavas
-    89: (73, 74),
-    90: (75, 76),
-    91: (77, 78),
+    89: (74, 75),
+    90: (73, 76),
+    91: (78, 77),
     92: (79, 80),
     93: (81, 82),
-    94: (83, 84),
-    95: (85, 86),
-    96: (87, 88),
+    94: (84, 83),
+    95: (85, 88),
+    96: (86, 87),
 
     # Quartas
     97: (89, 90),
@@ -45,10 +45,23 @@ CHAVEAMENTO_MATA_MATA = {
     101: (97, 98),
     102: (99, 100),
 
-    # Final e terceiro lugar
-    103: (101, 102),  # perdedores
-    104: (101, 102),  # vencedores
+    # Disputa do 3º Lugar e Final
+    103: (101, 102),
+    104: (101, 102),
 }
+
+def perdedor_partida(partida):
+    if partida.gols_casa is None or partida.gols_fora is None:
+        return None
+
+    if partida.gols_casa > partida.gols_fora:
+        return partida.time_fora
+
+    if partida.gols_fora > partida.gols_casa:
+        return partida.time_casa
+
+    return None
+
 
 def atualizar_chaveamento_mata_mata():
     for numero_destino, (jogo_origem_1, jogo_origem_2) in CHAVEAMENTO_MATA_MATA.items():
@@ -59,15 +72,18 @@ def atualizar_chaveamento_mata_mata():
         except Partida.DoesNotExist:
             continue
 
-        vencedor_1 = vencedor_partida(origem_1)
-        vencedor_2 = vencedor_partida(origem_2)
-
         if numero_destino == 103:
-            # Disputa do 3º lugar ainda será tratada depois com perdedores
-            continue
+            classificado_1 = perdedor_partida(origem_1)
+            classificado_2 = perdedor_partida(origem_2)
+        else:
+            classificado_1 = vencedor_partida(origem_1)
+            classificado_2 = vencedor_partida(origem_2)
 
-        partida_destino.time_casa = vencedor_1 if vencedor_1 else partida_destino.time_casa
-        partida_destino.time_fora = vencedor_2 if vencedor_2 else partida_destino.time_fora
+        if classificado_1:
+            partida_destino.time_casa = classificado_1
+
+        if classificado_2:
+            partida_destino.time_fora = classificado_2
 
         partida_destino.save(update_fields=["time_casa", "time_fora"])
 
@@ -82,10 +98,6 @@ class ClassificadoManualSchema(Schema):
     lado: str  # "casa" ou "fora"
     time_id: int
 
-class DefinirClassificadoManualSchema(Schema):
-    numero_jogo: int
-    lado: str
-    time_id: int
 
 @router.post("/classificado-manual")
 def definir_classificado_manual(request, data: ClassificadoManualSchema):
@@ -641,6 +653,116 @@ def classificacao_grupo(request, grupo_nome: str):
         ]
     }
 
+
+TERCEIROS_SLOTS_16_AVOS = {
+    74: ["A", "B", "C", "D", "F"],
+    77: ["C", "D", "F", "G", "H"],
+    79: ["C", "E", "F", "H", "I"],
+    80: ["E", "H", "I", "J", "K"],
+    81: ["B", "E", "F", "I", "J"],
+    82: ["A", "E", "H", "I", "J"],
+    85: ["E", "F", "G", "I", "J"],
+    87: ["D", "E", "I", "J", "L"],
+}
+
+
+def chave_terceiro(item):
+    return (
+        item["pontos"],
+        item["saldo"],
+        item["gols_pro"],
+    )
+
+
+def selecionar_melhores_terceiros(terceiros):
+    terceiros_validos = [
+        t for t in terceiros
+        if t["jogos"] > 0
+    ]
+
+    terceiros_ordenados = sorted(
+        terceiros_validos,
+        key=lambda x: (
+            -x["pontos"],
+            -x["saldo"],
+            -x["gols_pro"],
+        )
+    )
+
+    if len(terceiros_ordenados) <= 8:
+        return terceiros_ordenados, []
+
+    corte = chave_terceiro(terceiros_ordenados[7])
+
+    acima_do_corte = [
+        t for t in terceiros_ordenados
+        if chave_terceiro(t) > corte
+    ]
+
+    empatados_no_corte = [
+        t for t in terceiros_ordenados
+        if chave_terceiro(t) == corte
+    ]
+
+    vagas_restantes = 8 - len(acima_do_corte)
+
+    if len(empatados_no_corte) > vagas_restantes:
+        return acima_do_corte, empatados_no_corte
+
+    return terceiros_ordenados[:8], []
+
+
+def montar_atribuicao_terceiros(terceiros_classificados):
+    grupos_terceiros = {
+        t["grupo_letra"]: t
+        for t in terceiros_classificados
+    }
+
+    slots = list(TERCEIROS_SLOTS_16_AVOS.keys())
+    solucoes = []
+
+    def backtrack(index, usados, atual):
+        if index == len(slots):
+            solucoes.append(atual.copy())
+            return
+
+        numero_jogo = slots[index]
+
+        possibilidades = [
+            grupo
+            for grupo in TERCEIROS_SLOTS_16_AVOS[numero_jogo]
+            if grupo in grupos_terceiros and grupo not in usados
+        ]
+
+        for grupo in possibilidades:
+            atual[numero_jogo] = grupo
+            usados.add(grupo)
+
+            backtrack(index + 1, usados, atual)
+
+            usados.remove(grupo)
+            atual.pop(numero_jogo)
+
+    backtrack(0, set(), {})
+
+    if not solucoes:
+        return {}
+
+    atribuicao_final = {}
+
+    for numero_jogo in slots:
+        grupos_possiveis = {
+            solucao.get(numero_jogo)
+            for solucao in solucoes
+            if numero_jogo in solucao
+        }
+
+        if len(grupos_possiveis) == 1:
+            grupo = grupos_possiveis.pop()
+            atribuicao_final[numero_jogo] = grupos_terceiros[grupo]
+
+    return atribuicao_final
+
 @router.post("/gerar-16-avos")
 def gerar_16_avos(request):
     usuario = obter_usuario_request(request)
@@ -682,15 +804,8 @@ def gerar_16_avos(request):
             terceiro["grupo_letra"] = letra
             terceiros.append(terceiro)
 
-    terceiros = sorted(
-        terceiros,
-        key=lambda x: (
-            -x["pontos"],
-            -x["saldo"],
-            -x["gols_pro"],
-            x["time"],
-        )
-    )[:8]
+    terceiros, terceiros_pendentes_manual = selecionar_melhores_terceiros(terceiros)
+    atribuicao_terceiros = montar_atribuicao_terceiros(terceiros)
 
     jogos_16_avos = [
         (73, "2A", "2B"),
@@ -715,26 +830,18 @@ def gerar_16_avos(request):
     jogos_atualizados = []
     jogos_pendentes = []
 
-    def resolver_vaga(vaga):
+    def resolver_vaga(numero_jogo, vaga):
         if vaga.startswith("1") or vaga.startswith("2"):
             return posicoes.get(vaga)
 
         if vaga.startswith("3:"):
-            grupos_permitidos = vaga.replace("3:", "").split("/")
-
-            for terceiro in terceiros:
-                if (
-                    terceiro["grupo_letra"] in grupos_permitidos
-                    and terceiro["time_obj"].id not in terceiros_usados
-                ):
-                    terceiros_usados.add(terceiro["time_obj"].id)
-                    return terceiro
+            return atribuicao_terceiros.get(numero_jogo)
 
         return None
 
     for numero_jogo, vaga_casa, vaga_fora in jogos_16_avos:
-        time_casa_info = resolver_vaga(vaga_casa)
-        time_fora_info = resolver_vaga(vaga_fora)
+        time_casa_info = resolver_vaga(numero_jogo, vaga_casa)
+        time_fora_info = resolver_vaga(numero_jogo, vaga_fora)
 
         partida = Partida.objects.get(
             fase=fase_16,
@@ -767,6 +874,16 @@ def gerar_16_avos(request):
         ),
         "jogos_atualizados": jogos_atualizados,
         "jogos_pendentes": jogos_pendentes,
+        "terceiros_pendentes_manual": [
+            {
+                "grupo": t["grupo_letra"],
+                "time": t["time"],
+                "pontos": t["pontos"],
+                "saldo": t["saldo"],
+                "gols_pro": t["gols_pro"],
+            }
+            for t in terceiros_pendentes_manual
+        ],
     }
 
 @router.get("/times")
@@ -789,50 +906,3 @@ def listar_times(request):
             for t in times
         ]
     }
-
-@router.post("/classificado-manual")
-def classificado_manual(
-    request,
-    data: DefinirClassificadoManualSchema
-):
-    usuario = obter_usuario_request(request)
-
-    if not usuario.is_staff and not usuario.is_superuser:
-        return {
-            "success": False,
-            "message": "Sem permissão."
-        }
-
-    try:
-        partida = Partida.objects.get(
-            numero_jogo=data.numero_jogo
-        )
-
-        time = Time.objects.get(
-            id=data.time_id
-        )
-
-        if data.lado == "casa":
-            partida.time_casa = time
-
-        elif data.lado == "fora":
-            partida.time_fora = time
-
-        else:
-            return {
-                "success": False,
-                "message": "Lado inválido."
-            }
-
-        partida.save()
-
-        return {
-            "success": True,
-            "message": "Classificado definido."
-        }
-
-    except Exception as e:
-        return {
-            "success": False,
-            "message": str(e)
-        }

@@ -25,9 +25,30 @@ class PartidaAdmin(admin.ModelAdmin):
         "time_fora",
         "data_jogo",
         "estadio",
+        "gols_casa",
+        "gols_fora",
     )
-    list_filter = ("fase", "rodada", "grupo")
-    search_fields = ("time_casa__nome", "time_fora__nome", "estadio")
+
+    list_filter = (
+        "fase",
+        "grupo",
+        "rodada",
+        "data_jogo",
+    )
+
+    search_fields = (
+        "numero_jogo",
+        "time_casa__nome",
+        "time_fora__nome",
+        "estadio",
+    )
+
+    ordering = (
+        "numero_jogo",
+        "data_jogo",
+    )
+
+    list_per_page = 25
 
 
 @admin.register(Palpite)
