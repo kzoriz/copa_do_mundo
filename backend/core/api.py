@@ -12,7 +12,64 @@ User = get_user_model()
 router = Router()
 
 
+def vencedor_partida(partida):
+    if partida.gols_casa is None or partida.gols_fora is None:
+        return None
 
+    if partida.gols_casa > partida.gols_fora:
+        return partida.time_casa
+
+    if partida.gols_fora > partida.gols_casa:
+        return partida.time_fora
+
+    return None  # empate no mata-mata precisa de pênaltis futuramente
+
+CHAVEAMENTO_MATA_MATA = {
+    # Oitavas
+    89: (73, 74),
+    90: (75, 76),
+    91: (77, 78),
+    92: (79, 80),
+    93: (81, 82),
+    94: (83, 84),
+    95: (85, 86),
+    96: (87, 88),
+
+    # Quartas
+    97: (89, 90),
+    98: (91, 92),
+    99: (93, 94),
+    100: (95, 96),
+
+    # Semifinais
+    101: (97, 98),
+    102: (99, 100),
+
+    # Final e terceiro lugar
+    103: (101, 102),  # perdedores
+    104: (101, 102),  # vencedores
+}
+
+def atualizar_chaveamento_mata_mata():
+    for numero_destino, (jogo_origem_1, jogo_origem_2) in CHAVEAMENTO_MATA_MATA.items():
+        try:
+            partida_destino = Partida.objects.get(numero_jogo=numero_destino)
+            origem_1 = Partida.objects.get(numero_jogo=jogo_origem_1)
+            origem_2 = Partida.objects.get(numero_jogo=jogo_origem_2)
+        except Partida.DoesNotExist:
+            continue
+
+        vencedor_1 = vencedor_partida(origem_1)
+        vencedor_2 = vencedor_partida(origem_2)
+
+        if numero_destino == 103:
+            # Disputa do 3º lugar ainda será tratada depois com perdedores
+            continue
+
+        partida_destino.time_casa = vencedor_1 if vencedor_1 else partida_destino.time_casa
+        partida_destino.time_fora = vencedor_2 if vencedor_2 else partida_destino.time_fora
+
+        partida_destino.save(update_fields=["time_casa", "time_fora"])
 
 class PalpiteSchema(Schema):
     partida_id: int
@@ -291,9 +348,11 @@ def salvar_resultado_oficial(request, data: ResultadoOficialSchema):
         palpite.pontos = palpite.calcular_pontos()
         palpite.save(update_fields=["pontos", "placar_exato", "vencedor_correto"])
 
+    atualizar_chaveamento_mata_mata()
+
     return {
         "success": True,
-        "message": "Resultado oficial salvo com sucesso."
+        "message": "Resultado oficial salvo, pontos recalculados e chaveamento atualizado."
     }
 
 @router.get("/perfil")
