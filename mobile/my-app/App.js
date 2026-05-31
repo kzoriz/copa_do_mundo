@@ -727,17 +727,16 @@ function MeusPalpites({ setTela, onLogout, token }) {
   );
 }
 
-function AdminResultados({ setTela, onLogout, token }) {
-  const [partidas, setPartidas] = useState([]);
-  const [carregando, setCarregando] = useState(true);
-
-  useEffect(() => {
-    fetch(`${API_URL}/core/partidas`)
-      .then((res) => res.json())
-      .then((data) => setPartidas(data))
-      .catch((error) => console.log(error))
-      .finally(() => setCarregando(false));
-  }, []);
+function AdminResultados({ setTela, onLogout, setAdminFaseSelecionada }) {
+  const fases = [
+    "Fase de Grupos",
+    "16 Avos de Final",
+    "Oitavas de Final",
+    "Quartas de Final",
+    "Semifinal",
+    "Disputa do 3º Lugar",
+    "Final",
+  ];
 
   return (
     <View style={styles.page}>
@@ -747,7 +746,10 @@ function AdminResultados({ setTela, onLogout, token }) {
         <Pressable onPress={() => setTela("dashboard")}>
           <Text style={styles.link}>← Voltar ao painel</Text>
         </Pressable>
+
         <Text style={styles.title}>Resultados Oficiais</Text>
+        <Text style={styles.subtitle}>Escolha uma fase para lançar resultados</Text>
+
         <Pressable
           style={styles.button}
           onPress={async () => {
@@ -755,32 +757,265 @@ function AdminResultados({ setTela, onLogout, token }) {
               const response = await fetch(`${API_URL}/core/gerar-16-avos`, {
                 method: "POST",
                 headers: {
-                  Authorization: `Bearer ${token}`,
+                  Authorization: `Bearer ${localStorage.getItem("token")}`,
                 },
               });
 
               const data = await response.json();
               alert(data.message);
             } catch (error) {
-              alert("Erro ao gerar mata-mata.");
+              alert("Erro ao gerar 16 Avos.");
               console.log(error);
             }
           }}
         >
           <Text style={styles.buttonText}>Gerar 16 Avos</Text>
         </Pressable>
+
+        {fases.map((fase) => (
+          <Pressable
+            key={fase}
+            style={styles.cardMenu}
+            onPress={() => {
+              setAdminFaseSelecionada(fase);
+              setTela("adminFaseJogos");
+            }}
+          >
+            <Text style={styles.cardIcon}>🏆</Text>
+            <Text style={styles.cardMenuTitle}>{fase}</Text>
+            <Text style={styles.cardMenuText}>Cadastrar resultados desta fase</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
+  const [partidas, setPartidas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
+  const [grupoSelecionadoAdmin, setGrupoSelecionadoAdmin] = useState(null);
+  const [ladoSelecionado, setLadoSelecionado] = useState(null);
+
+  function obterLadoJogo(numeroJogo) {
+    const ladoEsquerdo = [73, 74, 75, 76, 77, 78, 79, 80, 89, 90, 91, 92, 97, 98, 101];
+    const ladoDireito = [81, 82, 83, 84, 85, 86, 87, 88, 93, 94, 95, 96, 99, 100, 102];
+
+    if (ladoEsquerdo.includes(numeroJogo)) return "esquerdo";
+    if (ladoDireito.includes(numeroJogo)) return "direito";
+    return "final";
+  }
+
+  useEffect(() => {
+    fetch(`${API_URL}/core/partidas`)
+      .then((res) => res.json())
+      .then((data) => setPartidas(data))
+      .catch((error) => console.log(error))
+      .finally(() => setCarregando(false));
+  }, []);
+
+  const deveMostrarFiltroLado = [
+    "16 Avos de Final",
+    "Oitavas de Final",
+    "Quartas de Final",
+    "Semifinal",
+  ].includes(adminFaseSelecionada);
+
+  const partidasDaFase = partidas.filter(
+    (jogo) => jogo.fase === adminFaseSelecionada
+  );
+
+  const grupos = [...new Set(
+    partidasDaFase.map((jogo) => jogo.grupo).filter(Boolean)
+  )].sort();
+
+  const rodadas = [...new Set(
+    partidasDaFase.map((jogo) => jogo.rodada).filter(Boolean)
+  )].sort();
+
+  let partidasFiltradas = partidasDaFase;
+
+  if (adminFaseSelecionada === "Fase de Grupos") {
+    if (grupoSelecionadoAdmin) {
+      partidasFiltradas = partidasFiltradas.filter(
+        (jogo) => jogo.grupo === grupoSelecionadoAdmin
+      );
+    }
+
+    if (rodadaSelecionada) {
+      partidasFiltradas = partidasFiltradas.filter(
+        (jogo) => jogo.rodada === rodadaSelecionada
+      );
+    }
+  } else if (deveMostrarFiltroLado && ladoSelecionado) {
+    partidasFiltradas = partidasFiltradas.filter(
+      (jogo) => obterLadoJogo(jogo.numero_jogo) === ladoSelecionado
+    );
+  }
+
+  function renderFiltroLado() {
+    if (!deveMostrarFiltroLado) return null;
+
+    return (
+      <>
+        <Text style={styles.subtitle}>Filtre pelo lado do chaveamento</Text>
+
+        <View style={styles.filterWrap}>
+          <Pressable
+            style={[
+              styles.filterChip,
+              ladoSelecionado === null && styles.filterChipActive,
+            ]}
+            onPress={() => setLadoSelecionado(null)}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                ladoSelecionado === null && styles.filterChipTextActive,
+              ]}
+            >
+              Todos
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.filterChip,
+              ladoSelecionado === "esquerdo" && styles.filterChipActive,
+            ]}
+            onPress={() => setLadoSelecionado("esquerdo")}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                ladoSelecionado === "esquerdo" && styles.filterChipTextActive,
+              ]}
+            >
+              Lado Esquerdo
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.filterChip,
+              ladoSelecionado === "direito" && styles.filterChipActive,
+            ]}
+            onPress={() => setLadoSelecionado("direito")}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                ladoSelecionado === "direito" && styles.filterChipTextActive,
+              ]}
+            >
+              Lado Direito
+            </Text>
+          </Pressable>
+        </View>
+      </>
+    );
+  }
+
+  return (
+    <View style={styles.page}>
+      <Header titulo="Resultados" onLogout={onLogout} />
+
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Pressable onPress={() => setTela("adminResultados")}>
+          <Text style={styles.link}>← Voltar às fases</Text>
+        </Pressable>
+
+        <Text style={styles.title}>{adminFaseSelecionada}</Text>
+
         {carregando ? (
           <ActivityIndicator size="large" />
+        ) : adminFaseSelecionada === "Fase de Grupos" ? (
+          <>
+            <Text style={styles.subtitle}>Filtre por grupo e rodada</Text>
+
+            <Text style={styles.filterTitle}>Grupos</Text>
+
+            <View style={styles.filterWrap}>
+              {grupos.map((grupo) => (
+                <Pressable
+                  key={grupo}
+                  style={[
+                    styles.filterChip,
+                    grupoSelecionadoAdmin === grupo && styles.filterChipActive,
+                  ]}
+                  onPress={() =>
+                    setGrupoSelecionadoAdmin(
+                      grupoSelecionadoAdmin === grupo ? null : grupo
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      grupoSelecionadoAdmin === grupo && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {grupo}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.filterTitle}>Rodadas</Text>
+
+            <View style={styles.filterWrap}>
+              {rodadas.map((rodada) => (
+                <Pressable
+                  key={rodada}
+                  style={[
+                    styles.filterChip,
+                    rodadaSelecionada === rodada && styles.filterChipActive,
+                  ]}
+                  onPress={() =>
+                    setRodadaSelecionada(
+                      rodadaSelecionada === rodada ? null : rodada
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      rodadaSelecionada === rodada && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {rodada}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {partidasFiltradas.length === 0 ? (
+              <Text style={styles.subtitle}>Nenhuma partida encontrada.</Text>
+            ) : (
+              partidasFiltradas.map((jogo) => (
+                <CardResultadoAdmin key={jogo.id} jogo={jogo} token={token} />
+              ))
+            )}
+          </>
+        ) : partidasDaFase.length === 0 ? (
+          <Text style={styles.subtitle}>Nenhuma partida encontrada nesta fase.</Text>
         ) : (
-          partidas.map((jogo) => (
-            <CardResultadoAdmin key={jogo.id} jogo={jogo} token={token} />
-          ))
+          <>
+            {renderFiltroLado()}
+
+            {partidasFiltradas.length === 0 ? (
+              <Text style={styles.subtitle}>Nenhuma partida encontrada neste lado.</Text>
+            ) : (
+              partidasFiltradas.map((jogo) => (
+                <CardResultadoAdmin key={jogo.id} jogo={jogo} token={token} />
+              ))
+            )}
+          </>
         )}
       </ScrollView>
     </View>
   );
 }
-
 function CardResultadoAdmin({ jogo, token }) {
   const [golsCasa, setGolsCasa] = useState(
     jogo.gols_casa !== null ? String(jogo.gols_casa) : ""
@@ -1030,6 +1265,7 @@ export default function App() {
   const [usuario, setUsuario] = useState(null);
   const [faseSelecionada, setFaseSelecionada] = useState(null);
   const [grupoSelecionado, setGrupoSelecionado] = useState(null);
+  const [adminFaseSelecionada, setAdminFaseSelecionada] = useState(null);
 
   useEffect(() => {
     const tokenSalvo = localStorage.getItem("token");
@@ -1122,10 +1358,20 @@ export default function App() {
       <AdminResultados
         setTela={setTela}
         onLogout={fazerLogout}
-        token={token}
+        setAdminFaseSelecionada={setAdminFaseSelecionada}
       />
     );
   }
+  if (tela === "adminFaseJogos") {
+  return (
+    <AdminFaseJogos
+      setTela={setTela}
+      onLogout={fazerLogout}
+      token={token}
+      adminFaseSelecionada={adminFaseSelecionada}
+    />
+  );
+}
   if (tela === "ranking") {
     return <Ranking setTela={setTela} onLogout={fazerLogout} />;
   }
@@ -1535,5 +1781,46 @@ vsText: {
     width: 38,
     textAlign: "center",
     color: "#475569",
+  },
+  filterTitle: {
+    width: "100%",
+    maxWidth: 560,
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#0F172A",
+    marginBottom: 8,
+    marginTop: 12,
+  },
+
+  filterWrap: {
+    width: "100%",
+    maxWidth: 560,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  filterChip: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+
+  filterChipActive: {
+    backgroundColor: "#0391CF",
+    borderColor: "#0391CF",
+  },
+
+  filterChipText: {
+    color: "#475569",
+    fontWeight: "bold",
+  },
+
+  filterChipTextActive: {
+    color: "#FFFFFF",
   },
 });
