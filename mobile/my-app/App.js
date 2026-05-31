@@ -809,9 +809,20 @@ function ModalClassificadoManual({ visible, times, onClose, onSelect }) {
                 style={styles.modalItem}
                 onPress={() => onSelect(time)}
               >
-                <Text style={styles.modalItemText}>
-                  {time.sigla} - {time.nome}
-                </Text>
+                <View style={styles.modalTeamRow}>
+                  {time.bandeira ? (
+                    <Image
+                      source={{ uri: time.bandeira }}
+                      style={styles.modalFlag}
+                    />
+                  ) : (
+                    <View style={styles.modalFlagPlaceholder} />
+                  )}
+
+                  <Text style={styles.modalItemText}>
+                    {time.sigla} - {time.nome}
+                  </Text>
+                </View>
               </Pressable>
             ))}
           </ScrollView>
@@ -839,8 +850,16 @@ function AdminClassificacaoGrupo({ setTela, onLogout, token, grupoSelecionado })
     async function carregarDados() {
       try {
         const [resClassificacao, resTimes] = await Promise.all([
-          fetch(`${API_URL}/core/classificacao-grupo/${encodeURIComponent(grupoSelecionado)}`),
-          fetch(`${API_URL}/core/times`),
+          fetch(
+            `${API_URL}/core/classificacao-grupo/${encodeURIComponent(
+              grupoSelecionado
+            )}`
+          ),
+          fetch(
+            `${API_URL}/core/grupo/${encodeURIComponent(
+              grupoSelecionado
+            )}/times`
+          ),
         ]);
 
         const dadosClassificacao = await resClassificacao.json();
@@ -928,14 +947,25 @@ function AdminClassificacaoGrupo({ setTela, onLogout, token, grupoSelecionado })
               ]}
               onPress={() => setValor(time.id)}
             >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  valor === time.id && styles.filterChipTextActive,
-                ]}
-              >
-                {time.sigla} - {time.nome}
-              </Text>
+              <View style={styles.manualTeamChipContent}>
+                {time.bandeira ? (
+                  <Image
+                    source={{ uri: time.bandeira }}
+                    style={styles.manualTeamFlag}
+                  />
+                ) : (
+                  <View style={styles.manualTeamFlagPlaceholder} />
+                )}
+
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    valor === time.id && styles.filterChipTextActive,
+                  ]}
+                >
+                  {time.sigla}
+                </Text>
+              </View>
             </Pressable>
           ))}
         </View>
@@ -964,10 +994,33 @@ function AdminClassificacaoGrupo({ setTela, onLogout, token, grupoSelecionado })
             <View style={styles.tableCard}>
               <Text style={styles.tableTitle}>Classificação atual</Text>
 
+              <View style={styles.tableHeader}>
+                <Text style={styles.colPos}>#</Text>
+                <Text style={styles.colTeam}>Time</Text>
+                <Text style={styles.col}>Pts</Text>
+                <Text style={styles.col}>SG</Text>
+                <Text style={styles.col}>GP</Text>
+              </View>
+
               {classificacao.map((item) => (
                 <View key={item.time} style={styles.tableRow}>
                   <Text style={styles.colPos}>{item.posicao}</Text>
-                  <Text style={styles.colTeam}>{item.time}</Text>
+
+                  <View style={styles.manualTableTeam}>
+                    {item.bandeira ? (
+                      <Image
+                        source={{ uri: item.bandeira }}
+                        style={styles.manualTableFlag}
+                      />
+                    ) : (
+                      <View style={styles.manualTableFlagPlaceholder} />
+                    )}
+
+                    <Text style={styles.colTeam}>
+                      {item.sigla || item.time}
+                    </Text>
+                  </View>
+
                   <Text style={styles.col}>{item.pontos}</Text>
                   <Text style={styles.col}>{item.saldo}</Text>
                   <Text style={styles.col}>{item.gols_pro}</Text>
@@ -2304,5 +2357,67 @@ vsText: {
   marginBottom: 12,
   borderWidth: 1,
   borderColor: "#E2E8F0",
-},
-});
+  },
+    modalTeamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  modalFlag: {
+    width: 24,
+    height: 18,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  modalFlagPlaceholder: {
+    width: 24,
+    height: 18,
+    borderRadius: 3,
+    backgroundColor: "#E2E8F0",
+  },
+  manualTeamChipContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  manualTeamFlag: {
+    width: 24,
+    height: 18,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  manualTeamFlagPlaceholder: {
+    width: 24,
+    height: 18,
+    borderRadius: 3,
+    backgroundColor: "#E2E8F0",
+  },
+
+  manualTableTeam: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  manualTableFlag: {
+    width: 24,
+    height: 18,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  manualTableFlagPlaceholder: {
+    width: 24,
+    height: 18,
+    borderRadius: 3,
+    backgroundColor: "#E2E8F0",
+  },
+  });

@@ -677,6 +677,12 @@ def classificacao_grupo(request, grupo_nome: str):
                 "gols_pro": item["gols_pro"],
                 "gols_contra": item["gols_contra"],
                 "saldo": item["saldo"],
+                "sigla": item["time_obj"].sigla,
+                "bandeira": (
+                    item["time_obj"].bandeira.url
+                    if item["time_obj"].bandeira
+                    else None
+                ),
             }
             for index, item in enumerate(classificacao)
         ]
@@ -965,4 +971,57 @@ def salvar_classificacao_manual(
     return {
         "success": True,
         "message": "Classificação manual salva."
+    }
+
+@router.get("/grupo/{grupo_nome}/times")
+def grupo_times(request, grupo_nome: str):
+    try:
+        grupo = Grupo.objects.get(nome=grupo_nome)
+    except Grupo.DoesNotExist:
+        return {
+            "success": False,
+            "message": "Grupo não encontrado."
+        }
+
+    partidas = Partida.objects.select_related(
+        "time_casa",
+        "time_fora",
+    ).filter(
+        grupo=grupo
+    )
+
+    times_dict = {}
+
+    for partida in partidas:
+        if partida.time_casa:
+            times_dict[partida.time_casa.id] = partida.time_casa
+
+        if partida.time_fora:
+            times_dict[partida.time_fora.id] = partida.time_fora
+
+    times = sorted(
+        times_dict.values(),
+        key=lambda time: time.nome
+    )
+    for time in times:
+        print(
+            time.nome,
+            request.build_absolute_uri(time.bandeira.url)
+            if time.bandeira else None
+        )
+    return {
+        "success": True,
+        "times": [
+            {
+                "id": time.id,
+                "nome": time.nome,
+                "sigla": time.sigla,
+                "bandeira": (
+                    request.build_absolute_uri(time.bandeira.url)
+                    if time.bandeira
+                    else None
+                ),
+            }
+            for time in times
+        ]
     }
