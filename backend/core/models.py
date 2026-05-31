@@ -146,3 +146,47 @@ class Palpite(models.Model):
             return 3
 
         return 0
+
+class ClassificacaoManualGrupo(models.Model):
+    grupo = models.OneToOneField(
+        Grupo,
+        on_delete=models.CASCADE,
+        related_name="classificacao_manual"
+    )
+
+    primeiro = models.ForeignKey(
+        Time,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+"
+    )
+
+    segundo = models.ForeignKey(
+        Time,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+"
+    )
+
+    terceiro = models.ForeignKey(
+        Time,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+"
+    )
+
+    quarto = models.ForeignKey(
+        Time,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+"
+    )
+
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.grupo.nome

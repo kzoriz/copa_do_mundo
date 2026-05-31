@@ -1,12 +1,11 @@
 from ninja import Router
 from typing import List
 from ninja import Schema
-from core.models import Partida, Palpite, Grupo, Fase, Time
+from core.models import Partida, Palpite, Grupo, Fase, Time, ClassificacaoManualGrupo
 from core.jwt_utils import obter_usuario_request
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
 from django.db import models
-
 User = get_user_model()
 
 router = Router()
@@ -231,6 +230,35 @@ def ordenar_classificacao_fifa(grupo, tabela):
     return resultado
 
 def calcular_classificacao_grupo_obj(grupo):
+    manual = ClassificacaoManualGrupo.objects.filter(
+        grupo=grupo
+    ).first()
+
+    if manual and manual.primeiro:
+
+        resultado = []
+
+        for time in [
+            manual.primeiro,
+            manual.segundo,
+            manual.terceiro,
+            manual.quarto,
+        ]:
+
+            if not time:
+                continue
+
+            resultado.append({
+                "time_obj": time,
+                "time": time.nome,
+                "manual": True,
+                "pontos": 0,
+                "saldo": 0,
+                "gols_pro": 0,
+                "jogos": 0,
+            })
+
+        return resultado
     partidas = Partida.objects.select_related(
         "time_casa",
         "time_fora"
@@ -639,6 +667,7 @@ def classificacao_grupo(request, grupo_nome: str):
         "classificacao": [
             {
                 "posicao": index + 1,
+                "time_id": item["time_obj"].id,
                 "time": item["time"],
                 "pontos": item["pontos"],
                 "jogos": item["jogos"],
@@ -905,4 +934,35 @@ def listar_times(request):
             }
             for t in times
         ]
+    }
+
+class ClassificacaoManualSchema(Schema):
+    grupo_id: int
+
+    primeiro_id: int
+    segundo_id: int
+    terceiro_id: int
+    quarto_id: int
+
+@router.post("/classificacao-manual")
+def salvar_classificacao_manual(
+    request,
+    data: ClassificacaoManualSchema
+):
+    grupo = Grupo.objects.get(id=data.grupo_id)
+
+    obj, _ = ClassificacaoManualGrupo.objects.get_or_create(
+        grupo=grupo
+    )
+
+    obj.primeiro = Time.objects.get(id=data.primeiro_id)
+    obj.segundo = Time.objects.get(id=data.segundo_id)
+    obj.terceiro = Time.objects.get(id=data.terceiro_id)
+    obj.quarto = Time.objects.get(id=data.quarto_id)
+
+    obj.save()
+
+    return {
+        "success": True,
+        "message": "Classificação manual salva."
     }

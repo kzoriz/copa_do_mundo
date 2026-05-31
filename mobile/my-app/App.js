@@ -825,7 +825,190 @@ function ModalClassificadoManual({ visible, times, onClose, onSelect }) {
   );
 }
 
-function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
+function AdminClassificacaoGrupo({ setTela, onLogout, token, grupoSelecionado }) {
+  const [classificacao, setClassificacao] = useState([]);
+  const [times, setTimes] = useState([]);
+  const [primeiroId, setPrimeiroId] = useState(null);
+  const [segundoId, setSegundoId] = useState(null);
+  const [terceiroId, setTerceiroId] = useState(null);
+  const [quartoId, setQuartoId] = useState(null);
+  const [mensagem, setMensagem] = useState("");
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    async function carregarDados() {
+      try {
+        const [resClassificacao, resTimes] = await Promise.all([
+          fetch(`${API_URL}/core/classificacao-grupo/${encodeURIComponent(grupoSelecionado)}`),
+          fetch(`${API_URL}/core/times`),
+        ]);
+
+        const dadosClassificacao = await resClassificacao.json();
+        const dadosTimes = await resTimes.json();
+
+        if (dadosClassificacao.success) {
+          setClassificacao(dadosClassificacao.classificacao);
+
+          if (dadosClassificacao.classificacao.length >= 4) {
+            setPrimeiroId(dadosClassificacao.classificacao[0].time_id);
+            setSegundoId(dadosClassificacao.classificacao[1].time_id);
+            setTerceiroId(dadosClassificacao.classificacao[2].time_id);
+            setQuartoId(dadosClassificacao.classificacao[3].time_id);
+          }
+        }
+
+        if (dadosTimes.success) {
+          setTimes(dadosTimes.times);
+        }
+      } catch (error) {
+        console.log(error);
+        setMensagem("Erro ao carregar dados.");
+      } finally {
+        setCarregando(false);
+      }
+    }
+
+    carregarDados();
+  }, [grupoSelecionado]);
+
+  async function salvarClassificacaoManual() {
+    if (!primeiroId || !segundoId || !terceiroId || !quartoId) {
+      setMensagem("Selecione os quatro colocados.");
+      return;
+    }
+
+    const ids = [primeiroId, segundoId, terceiroId, quartoId];
+
+    if (new Set(ids).size !== 4) {
+      setMensagem("Não é permitido repetir seleção nas posições.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/core/classificacao-manual`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          grupo_nome: grupoSelecionado,
+          primeiro_id: primeiroId,
+          segundo_id: segundoId,
+          terceiro_id: terceiroId,
+          quarto_id: quartoId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMensagem("✅ Classificação manual salva.");
+      } else {
+        setMensagem(data.message || "Erro ao salvar classificação.");
+      }
+    } catch (error) {
+      console.log(error);
+      setMensagem("Erro ao conectar com o servidor.");
+    }
+  }
+
+  function seletorPosicao(label, valor, setValor) {
+    return (
+      <View style={styles.manualPositionBox}>
+        <Text style={styles.filterTitle}>{label}</Text>
+
+        <View style={styles.filterWrap}>
+          {times.map((time) => (
+            <Pressable
+              key={time.id}
+              style={[
+                styles.filterChip,
+                valor === time.id && styles.filterChipActive,
+              ]}
+              onPress={() => setValor(time.id)}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  valor === time.id && styles.filterChipTextActive,
+                ]}
+              >
+                {time.sigla} - {time.nome}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.page}>
+      <Header titulo="Classificação Manual" onLogout={onLogout} />
+
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Pressable onPress={() => setTela("adminFaseJogos")}>
+          <Text style={styles.link}>← Voltar aos jogos do grupo</Text>
+        </Pressable>
+
+        <Text style={styles.title}>{grupoSelecionado}</Text>
+        <Text style={styles.subtitle}>
+          Ajuste manualmente a ordem em casos de Fair Play ou sorteio FIFA
+        </Text>
+
+        {carregando ? (
+          <ActivityIndicator size="large" />
+        ) : (
+          <>
+            <View style={styles.tableCard}>
+              <Text style={styles.tableTitle}>Classificação atual</Text>
+
+              {classificacao.map((item) => (
+                <View key={item.time} style={styles.tableRow}>
+                  <Text style={styles.colPos}>{item.posicao}</Text>
+                  <Text style={styles.colTeam}>{item.time}</Text>
+                  <Text style={styles.col}>{item.pontos}</Text>
+                  <Text style={styles.col}>{item.saldo}</Text>
+                  <Text style={styles.col}>{item.gols_pro}</Text>
+                </View>
+              ))}
+            </View>
+
+            {seletorPosicao("1º colocado", primeiroId, setPrimeiroId)}
+            {seletorPosicao("2º colocado", segundoId, setSegundoId)}
+            {seletorPosicao("3º colocado", terceiroId, setTerceiroId)}
+            {seletorPosicao("4º colocado", quartoId, setQuartoId)}
+
+            {mensagem ? (
+              <Text
+                style={
+                  mensagem.includes("✅")
+                    ? styles.successMessage
+                    : styles.message
+                }
+              >
+                {mensagem}
+              </Text>
+            ) : null}
+
+            <Pressable style={styles.button} onPress={salvarClassificacaoManual}>
+              <Text style={styles.buttonText}>Salvar classificação manual</Text>
+            </Pressable>
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function AdminFaseJogos({
+  setTela,
+  onLogout,
+  token,
+  adminFaseSelecionada,
+  setAdminGrupoSelecionado,
+}) {
   const [partidas, setPartidas] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
@@ -849,6 +1032,7 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
       setCarregando(false);
     }
   }
+
   async function carregarTimes() {
     try {
       const response = await fetch(`${API_URL}/core/times`);
@@ -901,15 +1085,26 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
   }
 
   function obterLadoJogo(numeroJogo) {
-    const ladoEsquerdo = [73, 74, 75, 76, 77, 78, 79, 80, 89, 90, 91, 92, 97, 98, 101];
-    const ladoDireito = [81, 82, 83, 84, 85, 86, 87, 88, 93, 94, 95, 96, 99, 100, 102];
+    const ladoEsquerdo = [
+      73, 74, 75, 76, 77, 78, 79, 80,
+      89, 90, 91, 92,
+      97, 98,
+      101,
+    ];
+
+    const ladoDireito = [
+      81, 82, 83, 84, 85, 86, 87, 88,
+      93, 94, 95, 96,
+      99, 100,
+      102,
+    ];
 
     if (ladoEsquerdo.includes(numeroJogo)) return "esquerdo";
     if (ladoDireito.includes(numeroJogo)) return "direito";
     return "final";
   }
 
-   useEffect(() => {
+  useEffect(() => {
     carregarPartidas();
     carregarTimes();
   }, []);
@@ -925,13 +1120,13 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
     (jogo) => jogo.fase === adminFaseSelecionada
   );
 
-  const grupos = [...new Set(
-    partidasDaFase.map((jogo) => jogo.grupo).filter(Boolean)
-  )].sort();
+  const grupos = [
+    ...new Set(partidasDaFase.map((jogo) => jogo.grupo).filter(Boolean)),
+  ].sort();
 
-  const rodadas = [...new Set(
-    partidasDaFase.map((jogo) => jogo.rodada).filter(Boolean)
-  )].sort();
+  const rodadas = [
+    ...new Set(partidasDaFase.map((jogo) => jogo.rodada).filter(Boolean)),
+  ].sort();
 
   let partidasFiltradas = partidasDaFase;
 
@@ -1052,7 +1247,8 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
                   <Text
                     style={[
                       styles.filterChipText,
-                      grupoSelecionadoAdmin === grupo && styles.filterChipTextActive,
+                      grupoSelecionadoAdmin === grupo &&
+                        styles.filterChipTextActive,
                     ]}
                   >
                     {grupo}
@@ -1060,6 +1256,20 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
                 </Pressable>
               ))}
             </View>
+
+            {grupoSelecionadoAdmin ? (
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => {
+                  setAdminGrupoSelecionado(grupoSelecionadoAdmin);
+                  setTela("adminClassificacaoGrupo");
+                }}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  ⚖️ Ajustar classificação do {grupoSelecionadoAdmin}
+                </Text>
+              </Pressable>
+            ) : null}
 
             <Text style={styles.filterTitle}>Rodadas</Text>
 
@@ -1080,7 +1290,8 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
                   <Text
                     style={[
                       styles.filterChipText,
-                      rodadaSelecionada === rodada && styles.filterChipTextActive,
+                      rodadaSelecionada === rodada &&
+                        styles.filterChipTextActive,
                     ]}
                   >
                     {rodada}
@@ -1104,13 +1315,17 @@ function AdminFaseJogos({ setTela, onLogout, token, adminFaseSelecionada }) {
             )}
           </>
         ) : partidasDaFase.length === 0 ? (
-          <Text style={styles.subtitle}>Nenhuma partida encontrada nesta fase.</Text>
+          <Text style={styles.subtitle}>
+            Nenhuma partida encontrada nesta fase.
+          </Text>
         ) : (
           <>
             {renderFiltroLado()}
 
             {partidasFiltradas.length === 0 ? (
-              <Text style={styles.subtitle}>Nenhuma partida encontrada neste lado.</Text>
+              <Text style={styles.subtitle}>
+                Nenhuma partida encontrada neste lado.
+              </Text>
             ) : (
               partidasFiltradas.map((jogo) => (
                 <CardResultadoAdmin
@@ -1462,6 +1677,7 @@ export default function App() {
   const [faseSelecionada, setFaseSelecionada] = useState(null);
   const [grupoSelecionado, setGrupoSelecionado] = useState(null);
   const [adminFaseSelecionada, setAdminFaseSelecionada] = useState(null);
+  const [adminGrupoSelecionado, setAdminGrupoSelecionado] = useState(null);
 
   useEffect(() => {
     const tokenSalvo = localStorage.getItem("token");
@@ -1565,9 +1781,20 @@ export default function App() {
       onLogout={fazerLogout}
       token={token}
       adminFaseSelecionada={adminFaseSelecionada}
+      setAdminGrupoSelecionado={setAdminGrupoSelecionado}
     />
   );
 }
+    if (tela === "adminClassificacaoGrupo") {
+    return (
+      <AdminClassificacaoGrupo
+        setTela={setTela}
+        onLogout={fazerLogout}
+        token={token}
+        grupoSelecionado={adminGrupoSelecionado}
+      />
+    );
+  }
   if (tela === "ranking") {
     return <Ranking setTela={setTela} onLogout={fazerLogout} />;
   }
@@ -2068,4 +2295,14 @@ vsText: {
     color: "#0F172A",
     fontWeight: "bold",
   },
+  manualPositionBox: {
+  width: "100%",
+  maxWidth: 560,
+  backgroundColor: "#FFFFFF",
+  padding: 14,
+  borderRadius: 14,
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: "#E2E8F0",
+},
 });
