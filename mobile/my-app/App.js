@@ -745,9 +745,28 @@ function AdminResultados({ setTela, onLogout, token }) {
         <Pressable onPress={() => setTela("dashboard")}>
           <Text style={styles.link}>← Voltar ao painel</Text>
         </Pressable>
-
         <Text style={styles.title}>Resultados Oficiais</Text>
+        <Pressable
+          style={styles.button}
+          onPress={async () => {
+            try {
+              const response = await fetch(`${API_URL}/core/gerar-16-avos`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              });
 
+              const data = await response.json();
+              alert(data.message);
+            } catch (error) {
+              alert("Erro ao gerar mata-mata.");
+              console.log(error);
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>Gerar 16 Avos</Text>
+        </Pressable>
         {carregando ? (
           <ActivityIndicator size="large" />
         ) : (

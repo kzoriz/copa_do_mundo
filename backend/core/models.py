@@ -69,8 +69,21 @@ class Partida(models.Model):
     )
 
     numero_jogo = models.PositiveIntegerField(null=True, blank=True)
-    time_casa = models.ForeignKey(Time, on_delete=models.CASCADE, related_name="partidas_casa")
-    time_fora = models.ForeignKey(Time, on_delete=models.CASCADE, related_name="partidas_fora")
+    time_casa = models.ForeignKey(
+        Time,
+        on_delete=models.CASCADE,
+        related_name="partidas_casa",
+        null=True,
+        blank=True
+    )
+
+    time_fora = models.ForeignKey(
+        Time,
+        on_delete=models.CASCADE,
+        related_name="partidas_fora",
+        null=True,
+        blank=True
+    )
     data_jogo = models.DateTimeField()
     estadio = models.CharField(max_length=150, blank=True)
 
@@ -82,7 +95,9 @@ class Partida(models.Model):
         unique_together = ("time_casa", "time_fora", "data_jogo")
 
     def __str__(self):
-        return f"{self.time_casa} x {self.time_fora}"
+        casa = self.time_casa.nome if self.time_casa else "A definir"
+        fora = self.time_fora.nome if self.time_fora else "A definir"
+        return f"{casa} x {fora}"
 
 
 class Palpite(models.Model):

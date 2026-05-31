@@ -1,7 +1,7 @@
 from ninja import Router
 from typing import List
 from ninja import Schema
-from core.models import Partida, Palpite
+from core.models import Partida, Palpite, Grupo, Fase
 from core.jwt_utils import obter_usuario_request
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
@@ -20,6 +20,100 @@ class PalpiteSchema(Schema):
     gols_fora: int
 
 
+def calcular_classificacao_grupo_obj(grupo):
+    partidas = Partida.objects.select_related(
+        "time_casa",
+        "time_fora"
+    ).filter(grupo=grupo)
+
+    tabela = {}
+
+    def garantir_time(time):
+        if time and time.id not in tabela:
+            tabela[time.id] = {
+                "time_obj": time,
+                "time": time.nome,
+                "pontos": 0,
+                "jogos": 0,
+                "vitorias": 0,
+                "empates": 0,
+                "derrotas": 0,
+                "gols_pro": 0,
+                "gols_contra": 0,
+                "saldo": 0,
+            }
+
+    for partida in partidas:
+        garantir_time(partida.time_casa)
+        garantir_time(partida.time_fora)
+
+        if partida.gols_casa is None or partida.gols_fora is None:
+            continue
+
+        casa = tabela[partida.time_casa.id]
+        fora = tabela[partida.time_fora.id]
+
+        casa["jogos"] += 1
+        fora["jogos"] += 1
+
+        casa["gols_pro"] += partida.gols_casa
+        casa["gols_contra"] += partida.gols_fora
+        fora["gols_pro"] += partida.gols_fora
+        fora["gols_contra"] += partida.gols_casa
+
+        if partida.gols_casa > partida.gols_fora:
+            casa["pontos"] += 3
+            casa["vitorias"] += 1
+            fora["derrotas"] += 1
+        elif partida.gols_casa < partida.gols_fora:
+            fora["pontos"] += 3
+            fora["vitorias"] += 1
+            casa["derrotas"] += 1
+        else:
+            casa["pontos"] += 1
+            fora["pontos"] += 1
+            casa["empates"] += 1
+            fora["empates"] += 1
+
+    for item in tabela.values():
+        item["saldo"] = item["gols_pro"] - item["gols_contra"]
+
+    return sorted(
+        tabela.values(),
+        key=lambda x: (
+            -x["pontos"],
+            -x["saldo"],
+            -x["gols_pro"],
+            x["time"],
+        )
+    )
+
+
+def chave_classificacao(item):
+    return (
+        item["pontos"],
+        item["saldo"],
+        item["gols_pro"],
+    )
+
+
+def posicao_sem_empate(classificacao, indice):
+    if indice >= len(classificacao):
+        return None
+
+    atual = classificacao[indice]
+
+    if atual["jogos"] == 0:
+        return None
+
+    if indice > 0 and chave_classificacao(atual) == chave_classificacao(classificacao[indice - 1]):
+        return None
+
+    if indice < len(classificacao) - 1 and chave_classificacao(atual) == chave_classificacao(classificacao[indice + 1]):
+        return None
+
+    return atual
+
 @router.post("/palpites")
 def criar_palpite(request, data: PalpiteSchema):
     usuario = obter_usuario_request(request)
@@ -37,7 +131,11 @@ def criar_palpite(request, data: PalpiteSchema):
             "success": False,
             "message": "Você já fez um palpite para este jogo e não pode editar."
         }
-
+    if partida.time_casa is None or partida.time_fora is None:
+        return {
+            "success": False,
+            "message": "Esta partida ainda não possui times definidos."
+        }
     palpite = Palpite.objects.create(
         usuario=usuario,
         partida=partida,
@@ -70,10 +168,12 @@ def listar_partidas(request):
             "fase": p.fase.nome,
             "rodada": p.rodada.nome if p.rodada else None,
             "grupo": p.grupo.nome if p.grupo else None,
-            "time_casa": p.time_casa.nome,
-            "time_fora": p.time_fora.nome,
-            "time_casa_bandeira": request.build_absolute_uri(p.time_casa.bandeira.url) if p.time_casa.bandeira else None,
-            "time_fora_bandeira": request.build_absolute_uri(p.time_fora.bandeira.url) if p.time_fora.bandeira else None,
+            "time_casa": p.time_casa.nome if p.time_casa else "A definir",
+            "time_fora": p.time_fora.nome if p.time_fora else "A definir",
+            "time_casa_bandeira": request.build_absolute_uri(
+                p.time_casa.bandeira.url) if p.time_casa and p.time_casa.bandeira else None,
+            "time_fora_bandeira": request.build_absolute_uri(
+                p.time_fora.bandeira.url) if p.time_fora and p.time_fora.bandeira else None,
             "data_jogo": p.data_jogo,
             "estadio": p.estadio,
             "gols_casa": p.gols_casa,
@@ -309,4 +409,113 @@ def classificacao_grupo(request, grupo_nome: str):
             }
             for index, item in enumerate(classificacao)
         ]
+    }
+
+@router.post("/gerar-16-avos")
+def gerar_16_avos(request):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {
+            "success": False,
+            "message": "Você precisa estar logado."
+        }
+
+    if not usuario.is_staff and not usuario.is_superuser:
+        return {
+            "success": False,
+            "message": "Você não tem permissão para gerar o mata-mata."
+        }
+
+    fase_16 = Fase.objects.get(nome="16 Avos de Final")
+
+    classificados = []
+    terceiros = []
+    grupos_ignorados = []
+
+    grupos = Grupo.objects.all().order_by("nome")
+
+    for grupo in grupos:
+        classificacao = calcular_classificacao_grupo_obj(grupo)
+
+        primeiro = posicao_sem_empate(classificacao, 0)
+        segundo = posicao_sem_empate(classificacao, 1)
+        terceiro = posicao_sem_empate(classificacao, 2)
+
+        if primeiro:
+            classificados.append(primeiro)
+
+        if segundo:
+            classificados.append(segundo)
+
+        if terceiro:
+            terceiros.append(terceiro)
+
+        if not primeiro and not segundo:
+            grupos_ignorados.append(grupo.nome)
+
+    melhores_terceiros = sorted(
+        terceiros,
+        key=lambda x: (
+            -x["pontos"],
+            -x["saldo"],
+            -x["gols_pro"],
+            x["time"],
+        )
+    )[:8]
+
+    classificados.extend(melhores_terceiros)
+
+    classificados = sorted(
+        classificados,
+        key=lambda x: (
+            -x["pontos"],
+            -x["saldo"],
+            -x["gols_pro"],
+            x["time"],
+        )
+    )
+
+    total_classificados = len(classificados)
+
+    if total_classificados < 2:
+        return {
+            "success": False,
+            "message": "Ainda não há classificados suficientes para gerar confrontos."
+        }
+
+    quantidade_jogos = min(total_classificados // 2, 16)
+
+    jogos_criados = []
+    numero_jogo = 73
+
+    for i in range(quantidade_jogos):
+        time_casa = classificados[i]["time_obj"]
+        time_fora = classificados[total_classificados - 1 - i]["time_obj"]
+
+        partida = Partida.objects.get(
+            fase=fase_16,
+            numero_jogo=numero_jogo
+        )
+
+        partida.time_casa = time_casa
+        partida.time_fora = time_fora
+        partida.save(update_fields=["time_casa", "time_fora"])
+
+        jogos_criados.append({
+            "numero_jogo": partida.numero_jogo,
+            "time_casa": time_casa.nome,
+            "time_fora": time_fora.nome,
+        })
+
+        numero_jogo += 1
+
+    return {
+        "success": True,
+        "message": (
+            f"Simulação gerada com {quantidade_jogos} jogos. "
+            f"Classificados considerados: {total_classificados}."
+        ),
+        "grupos_ignorados": grupos_ignorados,
+        "jogos": jogos_criados,
     }
