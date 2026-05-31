@@ -429,13 +429,13 @@ def gerar_16_avos(request):
 
     fase_16 = Fase.objects.get(nome="16 Avos de Final")
 
-    classificados = []
+    posicoes = {}
     terceiros = []
-    grupos_ignorados = []
 
     grupos = Grupo.objects.all().order_by("nome")
 
     for grupo in grupos:
+        letra = grupo.nome.replace("Grupo ", "").strip()
         classificacao = calcular_classificacao_grupo_obj(grupo)
 
         primeiro = posicao_sem_empate(classificacao, 0)
@@ -443,18 +443,16 @@ def gerar_16_avos(request):
         terceiro = posicao_sem_empate(classificacao, 2)
 
         if primeiro:
-            classificados.append(primeiro)
+            posicoes[f"1{letra}"] = primeiro
 
         if segundo:
-            classificados.append(segundo)
+            posicoes[f"2{letra}"] = segundo
 
         if terceiro:
+            terceiro["grupo_letra"] = letra
             terceiros.append(terceiro)
 
-        if not primeiro and not segundo:
-            grupos_ignorados.append(grupo.nome)
-
-    melhores_terceiros = sorted(
+    terceiros = sorted(
         terceiros,
         key=lambda x: (
             -x["pontos"],
@@ -464,58 +462,79 @@ def gerar_16_avos(request):
         )
     )[:8]
 
-    classificados.extend(melhores_terceiros)
+    jogos_16_avos = [
+        (73, "2A", "2B"),
+        (74, "1E", "3:A/B/C/D/F"),
+        (75, "1F", "2C"),
+        (76, "1C", "2F"),
+        (77, "1I", "3:C/D/F/G/H"),
+        (78, "2E", "2I"),
+        (79, "1A", "3:C/E/F/H/I"),
+        (80, "1L", "3:E/H/I/J/K"),
+        (81, "1D", "3:B/E/F/I/J"),
+        (82, "1G", "3:A/E/H/I/J"),
+        (83, "2K", "2L"),
+        (84, "1H", "2J"),
+        (85, "1B", "3:E/F/G/I/J"),
+        (86, "1J", "2H"),
+        (87, "1K", "3:D/E/I/J/L"),
+        (88, "2D", "2G"),
+    ]
 
-    classificados = sorted(
-        classificados,
-        key=lambda x: (
-            -x["pontos"],
-            -x["saldo"],
-            -x["gols_pro"],
-            x["time"],
-        )
-    )
+    terceiros_usados = set()
+    jogos_atualizados = []
+    jogos_pendentes = []
 
-    total_classificados = len(classificados)
+    def resolver_vaga(vaga):
+        if vaga.startswith("1") or vaga.startswith("2"):
+            return posicoes.get(vaga)
 
-    if total_classificados < 2:
-        return {
-            "success": False,
-            "message": "Ainda não há classificados suficientes para gerar confrontos."
-        }
+        if vaga.startswith("3:"):
+            grupos_permitidos = vaga.replace("3:", "").split("/")
 
-    quantidade_jogos = min(total_classificados // 2, 16)
+            for terceiro in terceiros:
+                if (
+                    terceiro["grupo_letra"] in grupos_permitidos
+                    and terceiro["time_obj"].id not in terceiros_usados
+                ):
+                    terceiros_usados.add(terceiro["time_obj"].id)
+                    return terceiro
 
-    jogos_criados = []
-    numero_jogo = 73
+        return None
 
-    for i in range(quantidade_jogos):
-        time_casa = classificados[i]["time_obj"]
-        time_fora = classificados[total_classificados - 1 - i]["time_obj"]
+    for numero_jogo, vaga_casa, vaga_fora in jogos_16_avos:
+        time_casa_info = resolver_vaga(vaga_casa)
+        time_fora_info = resolver_vaga(vaga_fora)
 
         partida = Partida.objects.get(
             fase=fase_16,
             numero_jogo=numero_jogo
         )
 
-        partida.time_casa = time_casa
-        partida.time_fora = time_fora
+        partida.time_casa = time_casa_info["time_obj"] if time_casa_info else None
+        partida.time_fora = time_fora_info["time_obj"] if time_fora_info else None
         partida.save(update_fields=["time_casa", "time_fora"])
 
-        jogos_criados.append({
-            "numero_jogo": partida.numero_jogo,
-            "time_casa": time_casa.nome,
-            "time_fora": time_fora.nome,
-        })
+        item_retorno = {
+            "numero_jogo": numero_jogo,
+            "vaga_casa": vaga_casa,
+            "vaga_fora": vaga_fora,
+            "time_casa": partida.time_casa.nome if partida.time_casa else "A definir",
+            "time_fora": partida.time_fora.nome if partida.time_fora else "A definir",
+        }
 
-        numero_jogo += 1
+        if time_casa_info and time_fora_info:
+            jogos_atualizados.append(item_retorno)
+        else:
+            jogos_pendentes.append(item_retorno)
 
     return {
         "success": True,
         "message": (
-            f"Simulação gerada com {quantidade_jogos} jogos. "
-            f"Classificados considerados: {total_classificados}."
+            f"Simulação dos 16 Avos atualizada. "
+            f"{len(jogos_atualizados)} jogos completos e "
+            f"{len(jogos_pendentes)} jogos aguardando adversário."
         ),
-        "grupos_ignorados": grupos_ignorados,
-        "jogos": jogos_criados,
+        "jogos_atualizados": jogos_atualizados,
+        "jogos_pendentes": jogos_pendentes,
     }

@@ -389,7 +389,7 @@ function CardJogo({ jogo, token }) {
 }
 
 
-function Fases({ setTela, onLogout, setFaseSelecionada }) {
+function Fases({ setTela, onLogout, setFaseSelecionada, setGrupoSelecionado }) {
   const fases = [
     "Fase de Grupos",
     "16 Avos de Final",
@@ -404,8 +404,10 @@ function Fases({ setTela, onLogout, setFaseSelecionada }) {
     setFaseSelecionada(fase);
 
     if (fase === "Fase de Grupos") {
+      setGrupoSelecionado(null);
       setTela("grupos");
     } else {
+      setGrupoSelecionado(null);
       setTela("jogos");
     }
   }
@@ -1081,6 +1083,7 @@ export default function App() {
         setTela={setTela}
         onLogout={fazerLogout}
         setFaseSelecionada={setFaseSelecionada}
+        setGrupoSelecionado={setGrupoSelecionado}
       />
     );
   }
