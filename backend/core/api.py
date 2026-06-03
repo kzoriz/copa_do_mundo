@@ -746,8 +746,8 @@ COMBINACOES_TERCEIROS_OFICIAL = {
         78: "E",
         79: "G",
         81: "B",
+        82: "F",
         86: "D",
-        87: "F",
         88: "H",
     },
     "ABCDEFIJ": {
@@ -756,8 +756,8 @@ COMBINACOES_TERCEIROS_OFICIAL = {
         78: "E",
         79: "I",
         81: "B",
+        82: "F",
         86: "D",
-        87: "F",
         88: "J",
     },
     "CDEFGHIJ": {
@@ -766,8 +766,8 @@ COMBINACOES_TERCEIROS_OFICIAL = {
         78: "G",
         79: "I",
         81: "D",
+        82: "H",
         86: "F",
-        87: "H",
         88: "J",
     },
     "EFGHIJKL": {
@@ -776,8 +776,8 @@ COMBINACOES_TERCEIROS_OFICIAL = {
         78: "I",
         79: "K",
         81: "F",
+        82: "J",
         86: "H",
-        87: "J",
         88: "L",
     },
 }
