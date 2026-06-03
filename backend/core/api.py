@@ -24,15 +24,17 @@ def vencedor_partida(partida):
     return None  # empate no mata-mata precisa de pênaltis futuramente
 
 CHAVEAMENTO_MATA_MATA = {
-    # Oitavas
-    89: (74, 75),
-    90: (73, 76),
-    91: (78, 77),
+    # Lado esquerdo - Oitavas
+    89: (74, 77),
+    90: (73, 75),
+    91: (76, 78),
     92: (79, 80),
-    93: (81, 82),
-    94: (84, 83),
-    95: (85, 88),
-    96: (86, 87),
+
+    # Lado direito - Oitavas
+    93: (83, 84),
+    94: (81, 82),
+    95: (86, 88),
+    96: (85, 87),
 
     # Quartas
     97: (89, 90),
@@ -44,7 +46,7 @@ CHAVEAMENTO_MATA_MATA = {
     101: (97, 98),
     102: (99, 100),
 
-    # Disputa do 3º Lugar e Final
+    # Disputa do 3º lugar e final
     103: (101, 102),
     104: (101, 102),
 }
@@ -92,14 +94,20 @@ class PalpiteSchema(Schema):
     gols_fora: int
 
 
-class ClassificadoManualSchema(Schema):
+class ClassificacaoGrupoManualSchema(Schema):
+    grupo_nome: str
+    primeiro_id: int
+    segundo_id: int
+    terceiro_id: int
+    quarto_id: int
+
+class ClassificadoMataMataManualSchema(Schema):
     numero_jogo: int
-    lado: str  # "casa" ou "fora"
+    lado: str
     time_id: int
 
-
-@router.post("/classificado-manual")
-def definir_classificado_manual(request, data: ClassificadoManualSchema):
+@router.post("/classificacao-grupo-manual")
+def salvar_classificacao_manual(request, data: ClassificacaoGrupoManualSchema):
     usuario = obter_usuario_request(request)
 
     if usuario is None:
@@ -111,28 +119,103 @@ def definir_classificado_manual(request, data: ClassificadoManualSchema):
     if not usuario.is_staff and not usuario.is_superuser:
         return {
             "success": False,
-            "message": "Você não tem permissão para definir classificados."
+            "message": "Você não tem permissão para ajustar classificação."
         }
 
-    partida = Partida.objects.get(numero_jogo=data.numero_jogo)
-    time = Time.objects.get(id=data.time_id)
+    try:
+        grupo = Grupo.objects.get(nome=data.grupo_nome)
 
-    if data.lado == "casa":
-        partida.time_casa = time
-    elif data.lado == "fora":
-        partida.time_fora = time
-    else:
+        obj, _ = ClassificacaoManualGrupo.objects.get_or_create(
+            grupo=grupo
+        )
+
+        obj.primeiro = Time.objects.get(id=data.primeiro_id)
+        obj.segundo = Time.objects.get(id=data.segundo_id)
+        obj.terceiro = Time.objects.get(id=data.terceiro_id)
+        obj.quarto = Time.objects.get(id=data.quarto_id)
+
+        obj.save()
+
+        return {
+            "success": True,
+            "message": "Classificação manual salva com sucesso."
+        }
+
+    except Grupo.DoesNotExist:
         return {
             "success": False,
-            "message": "Lado inválido. Use 'casa' ou 'fora'."
+            "message": "Grupo não encontrado."
         }
 
-    partida.save(update_fields=["time_casa", "time_fora"])
+    except Time.DoesNotExist:
+        return {
+            "success": False,
+            "message": "Uma das seleções não foi encontrada."
+        }
 
-    return {
-        "success": True,
-        "message": f"{time.nome} definido manualmente no jogo {partida.numero_jogo}."
-    }
+@router.post("/classificado-mata-mata-manual")
+def definir_classificado_mata_mata_manual(
+    request,
+    data: ClassificadoMataMataManualSchema
+):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {
+            "success": False,
+            "message": "Você precisa estar logado."
+        }
+
+    if not usuario.is_staff and not usuario.is_superuser:
+        return {
+            "success": False,
+            "message": "Você não tem permissão."
+        }
+
+    try:
+        partida = Partida.objects.get(
+            numero_jogo=data.numero_jogo
+        )
+
+        time = Time.objects.get(
+            id=data.time_id
+        )
+
+        if data.lado == "casa":
+            partida.time_casa = time
+
+        elif data.lado == "fora":
+            partida.time_fora = time
+
+        else:
+            return {
+                "success": False,
+                "message": "Lado inválido."
+            }
+
+        partida.save(
+            update_fields=["time_casa", "time_fora"]
+        )
+
+        return {
+            "success": True,
+            "message": (
+                f"{time.nome} definido manualmente "
+                f"no jogo {partida.numero_jogo}."
+            )
+        }
+
+    except Partida.DoesNotExist:
+        return {
+            "success": False,
+            "message": "Partida não encontrada."
+        }
+
+    except Time.DoesNotExist:
+        return {
+            "success": False,
+            "message": "Time não encontrado."
+        }
 
 def estatisticas_confronto_direto(grupo, times_ids):
     partidas = Partida.objects.filter(
@@ -253,9 +336,13 @@ def calcular_classificacao_grupo_obj(grupo):
                 "time": time.nome,
                 "manual": True,
                 "pontos": 0,
+                "jogos": 3,
+                "vitorias": 0,
+                "empates": 0,
+                "derrotas": 0,
                 "saldo": 0,
                 "gols_pro": 0,
-                "jogos": 0,
+                "gols_contra": 0,
             })
 
         return resultado
@@ -368,6 +455,9 @@ def posicao_sem_empate(classificacao, indice):
         return None
 
     atual = classificacao[indice]
+
+    if atual.get("manual"):
+        return atual
 
     if atual["jogos"] == 0:
         return None
@@ -599,67 +689,15 @@ def perfil(request):
 
 @router.get("/classificacao-grupo/{grupo_nome}")
 def classificacao_grupo(request, grupo_nome: str):
-    grupo_obj = Grupo.objects.get(nome=grupo_nome)
-    partidas = Partida.objects.select_related(
-        "grupo", "time_casa", "time_fora"
-    ).filter(
-        grupo=grupo_obj
-    )
+    try:
+        grupo_obj = Grupo.objects.get(nome=grupo_nome)
+    except Grupo.DoesNotExist:
+        return {
+            "success": False,
+            "message": "Grupo não encontrado."
+        }
 
-    tabela = {}
-
-    def garantir_time(time):
-        if time.id not in tabela:
-            tabela[time.id] = {
-                "time_obj": time,
-                "time": time.nome,
-                "pontos": 0,
-                "jogos": 0,
-                "vitorias": 0,
-                "empates": 0,
-                "derrotas": 0,
-                "gols_pro": 0,
-                "gols_contra": 0,
-                "saldo": 0,
-            }
-
-    for partida in partidas:
-        garantir_time(partida.time_casa)
-        garantir_time(partida.time_fora)
-
-        if partida.gols_casa is None or partida.gols_fora is None:
-            continue
-
-        casa = tabela[partida.time_casa.id]
-        fora = tabela[partida.time_fora.id]
-
-        casa["jogos"] += 1
-        fora["jogos"] += 1
-
-        casa["gols_pro"] += partida.gols_casa
-        casa["gols_contra"] += partida.gols_fora
-
-        fora["gols_pro"] += partida.gols_fora
-        fora["gols_contra"] += partida.gols_casa
-
-        if partida.gols_casa > partida.gols_fora:
-            casa["pontos"] += 3
-            casa["vitorias"] += 1
-            fora["derrotas"] += 1
-        elif partida.gols_casa < partida.gols_fora:
-            fora["pontos"] += 3
-            fora["vitorias"] += 1
-            casa["derrotas"] += 1
-        else:
-            casa["pontos"] += 1
-            fora["pontos"] += 1
-            casa["empates"] += 1
-            fora["empates"] += 1
-
-    for item in tabela.values():
-        item["saldo"] = item["gols_pro"] - item["gols_contra"]
-
-    classificacao = ordenar_classificacao_fifa(grupo=grupo_obj, tabela=tabela)
+    classificacao = calcular_classificacao_grupo_obj(grupo_obj)
 
     return {
         "success": True,
@@ -669,17 +707,18 @@ def classificacao_grupo(request, grupo_nome: str):
                 "posicao": index + 1,
                 "time_id": item["time_obj"].id,
                 "time": item["time"],
-                "pontos": item["pontos"],
-                "jogos": item["jogos"],
-                "vitorias": item["vitorias"],
-                "empates": item["empates"],
-                "derrotas": item["derrotas"],
-                "gols_pro": item["gols_pro"],
-                "gols_contra": item["gols_contra"],
-                "saldo": item["saldo"],
+                "manual": item.get("manual", False),
+                "pontos": item.get("pontos", 0),
+                "jogos": item.get("jogos", 0),
+                "vitorias": item.get("vitorias", 0),
+                "empates": item.get("empates", 0),
+                "derrotas": item.get("derrotas", 0),
+                "gols_pro": item.get("gols_pro", 0),
+                "gols_contra": item.get("gols_contra", 0),
+                "saldo": item.get("saldo", 0),
                 "sigla": item["time_obj"].sigla,
                 "bandeira": (
-                    item["time_obj"].bandeira.url
+                    request.build_absolute_uri(item["time_obj"].bandeira.url)
                     if item["time_obj"].bandeira
                     else None
                 ),
@@ -700,6 +739,48 @@ TERCEIROS_SLOTS_16_AVOS = {
     87: ["D", "E", "I", "J", "L"],
 }
 
+COMBINACOES_TERCEIROS_OFICIAL = {
+    "ABCDEFGH": {
+        74: "A",
+        75: "C",
+        78: "E",
+        79: "G",
+        81: "B",
+        86: "D",
+        87: "F",
+        88: "H",
+    },
+    "ABCDEFIJ": {
+        74: "A",
+        75: "C",
+        78: "E",
+        79: "I",
+        81: "B",
+        86: "D",
+        87: "F",
+        88: "J",
+    },
+    "CDEFGHIJ": {
+        74: "C",
+        75: "E",
+        78: "G",
+        79: "I",
+        81: "D",
+        86: "F",
+        87: "H",
+        88: "J",
+    },
+    "EFGHIJKL": {
+        74: "E",
+        75: "G",
+        78: "I",
+        79: "K",
+        81: "F",
+        86: "H",
+        87: "J",
+        88: "L",
+    },
+}
 
 def chave_terceiro(item):
     return (
@@ -753,50 +834,18 @@ def montar_atribuicao_terceiros(terceiros_classificados):
         for t in terceiros_classificados
     }
 
-    slots = list(TERCEIROS_SLOTS_16_AVOS.keys())
-    solucoes = []
+    chave = "".join(sorted(grupos_terceiros.keys()))
 
-    def backtrack(index, usados, atual):
-        if index == len(slots):
-            solucoes.append(atual.copy())
-            return
+    mapa_oficial = COMBINACOES_TERCEIROS_OFICIAL.get(chave)
 
-        numero_jogo = slots[index]
-
-        possibilidades = [
-            grupo
-            for grupo in TERCEIROS_SLOTS_16_AVOS[numero_jogo]
-            if grupo in grupos_terceiros and grupo not in usados
-        ]
-
-        for grupo in possibilidades:
-            atual[numero_jogo] = grupo
-            usados.add(grupo)
-
-            backtrack(index + 1, usados, atual)
-
-            usados.remove(grupo)
-            atual.pop(numero_jogo)
-
-    backtrack(0, set(), {})
-
-    if not solucoes:
+    if not mapa_oficial:
         return {}
 
-    atribuicao_final = {}
-
-    for numero_jogo in slots:
-        grupos_possiveis = {
-            solucao.get(numero_jogo)
-            for solucao in solucoes
-            if numero_jogo in solucao
-        }
-
-        if len(grupos_possiveis) == 1:
-            grupo = grupos_possiveis.pop()
-            atribuicao_final[numero_jogo] = grupos_terceiros[grupo]
-
-    return atribuicao_final
+    return {
+        numero_jogo: grupos_terceiros[grupo_letra]
+        for numero_jogo, grupo_letra in mapa_oficial.items()
+        if grupo_letra in grupos_terceiros
+    }
 
 @router.post("/gerar-16-avos")
 def gerar_16_avos(request):
@@ -843,22 +892,25 @@ def gerar_16_avos(request):
     atribuicao_terceiros = montar_atribuicao_terceiros(terceiros)
 
     jogos_16_avos = [
+        # Lado esquerdo
         (73, "2A", "2B"),
         (74, "1E", "3:A/B/C/D/F"),
-        (75, "1F", "2C"),
+        (75, "1I", "3:C/D/F/G/H"),
         (76, "1C", "2F"),
-        (77, "1I", "3:C/D/F/G/H"),
-        (78, "2E", "2I"),
-        (79, "1A", "3:C/E/F/H/I"),
-        (80, "1L", "3:E/H/I/J/K"),
+        (77, "2E", "2I"),
+        (78, "1A", "3:C/E/F/H/I"),
+        (79, "1G", "3:A/E/H/I/J"),
+        (80, "2K", "2L"),
+
+        # Lado direito
         (81, "1D", "3:B/E/F/I/J"),
-        (82, "1G", "3:A/E/H/I/J"),
-        (83, "2K", "2L"),
-        (84, "1H", "2J"),
-        (85, "1B", "3:E/F/G/I/J"),
-        (86, "1J", "2H"),
-        (87, "1K", "3:D/E/I/J/L"),
-        (88, "2D", "2G"),
+        (82, "1B", "3:E/F/G/I/J"),
+        (83, "1J", "2H"),
+        (84, "2D", "2G"),
+        (85, "1F", "2C"),
+        (86, "1K", "3:D/E/I/J/L"),
+        (87, "1H", "2J"),
+        (88, "1L", "3:E/H/I/J/K"),
     ]
 
     terceiros_usados = set()
@@ -942,36 +994,7 @@ def listar_times(request):
         ]
     }
 
-class ClassificacaoManualSchema(Schema):
-    grupo_id: int
 
-    primeiro_id: int
-    segundo_id: int
-    terceiro_id: int
-    quarto_id: int
-
-@router.post("/classificacao-manual")
-def salvar_classificacao_manual(
-    request,
-    data: ClassificacaoManualSchema
-):
-    grupo = Grupo.objects.get(id=data.grupo_id)
-
-    obj, _ = ClassificacaoManualGrupo.objects.get_or_create(
-        grupo=grupo
-    )
-
-    obj.primeiro = Time.objects.get(id=data.primeiro_id)
-    obj.segundo = Time.objects.get(id=data.segundo_id)
-    obj.terceiro = Time.objects.get(id=data.terceiro_id)
-    obj.quarto = Time.objects.get(id=data.quarto_id)
-
-    obj.save()
-
-    return {
-        "success": True,
-        "message": "Classificação manual salva."
-    }
 
 @router.get("/grupo/{grupo_nome}/times")
 def grupo_times(request, grupo_nome: str):
@@ -1025,3 +1048,4 @@ def grupo_times(request, grupo_nome: str):
             for time in times
         ]
     }
+

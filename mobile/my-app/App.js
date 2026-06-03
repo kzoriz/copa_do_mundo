@@ -904,7 +904,7 @@ function AdminClassificacaoGrupo({ setTela, onLogout, token, grupoSelecionado })
     }
 
     try {
-      const response = await fetch(`${API_URL}/core/classificacao-manual`, {
+      const response = await fetch(`${API_URL}/core/classificacao-grupo-manual`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1107,7 +1107,7 @@ function AdminFaseJogos({
 
   async function definirClassificadoManual(time) {
     try {
-      const response = await fetch(`${API_URL}/core/classificado-manual`, {
+      const response = await fetch(`${API_URL}/core/classificado-mata-mata-manual`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1138,24 +1138,24 @@ function AdminFaseJogos({
   }
 
   function obterLadoJogo(numeroJogo) {
-    const ladoEsquerdo = [
-      73, 74, 75, 76, 77, 78, 79, 80,
-      89, 90, 91, 92,
-      97, 98,
-      101,
-    ];
+  const ladoEsquerdo = [
+    73, 74, 75, 76, 77, 78, 79, 80,
+    89, 90, 91, 92,
+    97, 98,
+    101,
+  ];
 
-    const ladoDireito = [
-      81, 82, 83, 84, 85, 86, 87, 88,
-      93, 94, 95, 96,
-      99, 100,
-      102,
-    ];
+  const ladoDireito = [
+    81, 82, 83, 84, 85, 86, 87, 88,
+    93, 94, 95, 96,
+    99, 100,
+    102,
+  ];
 
-    if (ladoEsquerdo.includes(numeroJogo)) return "esquerdo";
-    if (ladoDireito.includes(numeroJogo)) return "direito";
-    return "final";
-  }
+  if (ladoEsquerdo.includes(numeroJogo)) return "esquerdo";
+  if (ladoDireito.includes(numeroJogo)) return "direito";
+  return "final";
+}
 
   useEffect(() => {
     carregarPartidas();
@@ -1263,7 +1263,55 @@ function AdminFaseJogos({
       </>
     );
   }
+const ordemVisualMataMata = {
+  73: 1,
+  74: 2,
+  75: 3,
+  76: 4,
+  77: 5,
+  78: 6,
+  79: 7,
+  80: 8,
 
+  89: 9,
+  90: 10,
+  91: 11,
+  92: 12,
+
+  97: 13,
+  98: 14,
+
+  101: 15,
+
+  81: 101,
+  82: 102,
+  83: 103,
+  84: 104,
+  85: 105,
+  86: 106,
+  87: 107,
+  88: 108,
+
+  93: 109,
+  94: 110,
+  95: 111,
+  96: 112,
+
+  99: 113,
+  100: 114,
+
+  102: 115,
+
+  103: 201,
+  104: 202,
+};
+
+partidasFiltradas = [...partidasFiltradas].sort((a, b) => {
+  const ordemA = ordemVisualMataMata[a.numero_jogo] ?? a.numero_jogo;
+  const ordemB = ordemVisualMataMata[b.numero_jogo] ?? b.numero_jogo;
+
+  return ordemA - ordemB;
+});
   return (
     <View style={styles.page}>
       <Header titulo="Resultados" onLogout={onLogout} />
