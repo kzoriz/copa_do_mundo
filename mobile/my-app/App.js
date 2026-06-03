@@ -1140,13 +1140,16 @@ function AdminFaseJogos({
 function obterLadoJogo(numeroJogo) {
   const ladoEsquerdo = [
     73, 74, 75, 79, 80, 81, 85, 87,
-    89, 90, 97, 101,
+    89, 90, 91, 92,
+    97, 98,
+    101,
   ];
 
   const ladoDireito = [
     76, 77, 78, 82, 83, 84, 86, 88,
-    91, 92, 93, 94, 95, 96,
-    98, 99, 100, 102,
+    93, 94, 95, 96,
+    99, 100,
+    102,
   ];
 
   if (ladoEsquerdo.includes(numeroJogo)) return "esquerdo";
@@ -1271,6 +1274,16 @@ const ordemVisualMataMata = {
   85: 7,
   87: 8,
 
+  89: 9,
+  90: 10,
+  91: 11,
+  92: 12,
+
+  97: 13,
+  98: 14,
+
+  101: 15,
+
   76: 101,
   77: 102,
   78: 103,
@@ -1279,6 +1292,16 @@ const ordemVisualMataMata = {
   84: 106,
   86: 107,
   88: 108,
+
+  93: 109,
+  94: 110,
+  95: 111,
+  96: 112,
+
+  99: 113,
+  100: 114,
+
+  102: 115,
 
   103: 201,
   104: 202,
