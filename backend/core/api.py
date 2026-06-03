@@ -6,6 +6,9 @@ from core.jwt_utils import obter_usuario_request
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.utils import timezone
+from datetime import timedelta
+
 User = get_user_model()
 
 router = Router()
@@ -481,6 +484,20 @@ def criar_palpite(request, data: PalpiteSchema):
         }
 
     partida = Partida.objects.get(id=data.partida_id)
+
+    if partida.gols_casa is not None or partida.gols_fora is not None:
+        return {
+            "success": False,
+            "message": "Não é possível palpitar em uma partida que já possui resultado oficial."
+        }
+
+    limite_palpite = partida.data_jogo - timedelta(minutes=30)
+
+    if timezone.now() >= limite_palpite:
+        return {
+            "success": False,
+            "message": "O prazo para palpitar nesta partida já encerrou."
+        }
 
     if Palpite.objects.filter(usuario=usuario, partida=partida).exists():
         return {

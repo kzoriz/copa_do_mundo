@@ -281,6 +281,12 @@ function CardJogo({ jogo, token }) {
   jogo.time_casa !== "A definir" &&
   jogo.time_fora !== "A definir";
 
+  const agora = new Date();
+  const horarioJogo = new Date(jogo.data_jogo);
+  const limitePalpite = new Date(horarioJogo.getTime() - 30 * 60 * 1000);
+
+  const prazoEncerrado = agora >= limitePalpite;
+
   async function salvarPalpite() {
     if (golsCasa === "" || golsFora === "") {
       setMensagem("Informe os dois placares.");
@@ -376,24 +382,27 @@ function CardJogo({ jogo, token }) {
 
       {mensagem ? <Text style={styles.message}>{mensagem}</Text> : null}
 
-      <Pressable
-        style={[
-          styles.button,
-          (salvando || bloqueado || !partidaDefinida) && styles.disabledButton,
-        ]}
-        onPress={salvarPalpite}
-        disabled={salvando || bloqueado || !partidaDefinida}
-      >
-        <Text style={styles.buttonText}>
-          {!partidaDefinida
-            ? "Aguardando definição dos times"
+    <Pressable
+      style={[
+        styles.button,
+        (salvando || bloqueado || !partidaDefinida || prazoEncerrado) &&
+          styles.disabledButton,
+      ]}
+      onPress={salvarPalpite}
+      disabled={salvando || bloqueado || !partidaDefinida || prazoEncerrado}
+    >
+      <Text style={styles.buttonText}>
+        {!partidaDefinida
+          ? "Aguardando definição dos times"
+          : prazoEncerrado
+            ? "Prazo de palpite encerrado"
             : bloqueado
               ? "Palpite registrado"
               : salvando
                 ? "Salvando..."
                 : "Salvar palpite"}
-        </Text>
-      </Pressable>
+      </Text>
+    </Pressable>
     </View>
   );
 }
