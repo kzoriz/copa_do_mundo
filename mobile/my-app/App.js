@@ -277,6 +277,10 @@ function CardJogo({ jogo, token }) {
   );
   const [salvando, setSalvando] = useState(false);
 
+  const partidaDefinida =
+  jogo.time_casa !== "A definir" &&
+  jogo.time_fora !== "A definir";
+
   async function salvarPalpite() {
     if (golsCasa === "" || golsFora === "") {
       setMensagem("Informe os dois placares.");
@@ -375,17 +379,19 @@ function CardJogo({ jogo, token }) {
       <Pressable
         style={[
           styles.button,
-          (salvando || bloqueado) && styles.disabledButton,
+          (salvando || bloqueado || !partidaDefinida) && styles.disabledButton,
         ]}
         onPress={salvarPalpite}
-        disabled={salvando || bloqueado}
+        disabled={salvando || bloqueado || !partidaDefinida}
       >
         <Text style={styles.buttonText}>
-          {bloqueado
-            ? "Palpite registrado"
-            : salvando
-              ? "Salvando..."
-              : "Salvar palpite"}
+          {!partidaDefinida
+            ? "Aguardando definição dos times"
+            : bloqueado
+              ? "Palpite registrado"
+              : salvando
+                ? "Salvando..."
+                : "Salvar palpite"}
         </Text>
       </Pressable>
     </View>
@@ -500,8 +506,57 @@ function Jogos({ setTela, onLogout, token, faseSelecionada, grupoSelecionado }) 
   const [partidas, setPartidas] = useState([]);
   const [carregando, setCarregando] = useState(true);
 
+  function obterOrdemVisual(numeroJogo) {
+    const ordemVisualMataMata = {
+      73: 1,
+      74: 2,
+      75: 3,
+      79: 4,
+      80: 5,
+      81: 6,
+      85: 7,
+      87: 8,
+
+      89: 9,
+      90: 10,
+      91: 11,
+      92: 12,
+
+      97: 13,
+      98: 14,
+
+      101: 15,
+
+      76: 101,
+      77: 102,
+      78: 103,
+      82: 104,
+      83: 105,
+      84: 106,
+      86: 107,
+      88: 108,
+
+      93: 109,
+      94: 110,
+      95: 111,
+      96: 112,
+
+      99: 113,
+      100: 114,
+
+      102: 115,
+
+      103: 201,
+      104: 202,
+    };
+
+    return ordemVisualMataMata[numeroJogo] ?? numeroJogo;
+  }
+
   useEffect(() => {
     async function carregarDados() {
+      setCarregando(true);
+
       try {
         const [resPartidas, resPalpites] = await Promise.all([
           fetch(`${API_URL}/core/partidas`),
@@ -537,7 +592,7 @@ function Jogos({ setTela, onLogout, token, faseSelecionada, grupoSelecionado }) 
     }
 
     carregarDados();
-  }, [token]);
+  }, [token, faseSelecionada, grupoSelecionado]);
 
   let partidasFiltradas = partidas;
 
@@ -552,6 +607,10 @@ function Jogos({ setTela, onLogout, token, faseSelecionada, grupoSelecionado }) 
       (jogo) => jogo.grupo === grupoSelecionado
     );
   }
+
+  partidasFiltradas = [...partidasFiltradas].sort((a, b) => {
+    return obterOrdemVisual(a.numero_jogo) - obterOrdemVisual(b.numero_jogo);
+  });
 
   return (
     <View style={styles.page}>
@@ -577,9 +636,11 @@ function Jogos({ setTela, onLogout, token, faseSelecionada, grupoSelecionado }) 
         <Text style={styles.subtitle}>
           Registre seus palpites para os jogos selecionados
         </Text>
+
         {grupoSelecionado ? (
           <ClassificacaoGrupo grupoSelecionado={grupoSelecionado} />
         ) : null}
+
         {carregando ? (
           <ActivityIndicator size="large" />
         ) : partidasFiltradas.length === 0 ? (
