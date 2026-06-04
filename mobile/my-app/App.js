@@ -251,7 +251,11 @@ function Dashboard({ setTela, onLogout, usuario, setFaseSelecionada, setGrupoSel
           <Text style={styles.cardMenuTitle}>Ranking</Text>
           <Text style={styles.cardMenuText}>Acompanhe a classificação dos participantes</Text>
         </Pressable>
-
+        <Pressable style={styles.cardMenu} onPress={() => setTela("gruposRanking")}>
+          <Text style={styles.cardIcon}>👥</Text>
+          <Text style={styles.cardMenuTitle}>Grupos de Ranking</Text>
+          <Text style={styles.cardMenuText}>Crie ou entre em grupos privados</Text>
+        </Pressable>
         <Pressable style={styles.cardMenu} onPress={() => setTela("perfil")}>
           <Text style={styles.cardIcon}>👤</Text>
           <Text style={styles.cardMenuTitle}>Perfil</Text>
@@ -1704,12 +1708,181 @@ function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassifica
   );
 }
 
-function Ranking({ setTela, onLogout }) {
+function GruposRanking({ setTela, onLogout, token, setGrupoRankingSelecionado }) {
+  const [nome, setNome] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [grupos, setGrupos] = useState([]);
+  const [mensagem, setMensagem] = useState("");
+  const [carregando, setCarregando] = useState(true);
+
+  async function carregarGrupos() {
+    try {
+      const response = await fetch(`${API_URL}/core/grupos-ranking/meus`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setGrupos(data.grupos);
+      }
+    } catch (error) {
+      console.log(error);
+      setMensagem("Erro ao carregar grupos.");
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarGrupos();
+  }, []);
+
+  async function criarGrupo() {
+    if (!nome.trim()) {
+      setMensagem("Informe o nome do grupo.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/core/grupos-ranking`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nome }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMensagem(`Grupo criado. Código: ${data.grupo.codigo}`);
+        setNome("");
+        carregarGrupos();
+      } else {
+        setMensagem(data.message || "Erro ao criar grupo.");
+      }
+    } catch (error) {
+      console.log(error);
+      setMensagem("Erro ao conectar com o servidor.");
+    }
+  }
+
+  async function entrarGrupo() {
+    if (!codigo.trim()) {
+      setMensagem("Informe o código do grupo.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/core/grupos-ranking/entrar`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ codigo }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMensagem(data.message);
+        setCodigo("");
+        carregarGrupos();
+      } else {
+        setMensagem(data.message || "Erro ao entrar no grupo.");
+      }
+    } catch (error) {
+      console.log(error);
+      setMensagem("Erro ao conectar com o servidor.");
+    }
+  }
+
+  return (
+    <View style={styles.page}>
+      <Header titulo="Grupos de Ranking" onLogout={onLogout} />
+
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Pressable onPress={() => setTela("dashboard")}>
+          <Text style={styles.link}>← Voltar ao painel</Text>
+        </Pressable>
+
+        <Text style={styles.title}>Grupos de Ranking</Text>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Criar grupo</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Nome do grupo"
+            value={nome}
+            onChangeText={setNome}
+          />
+
+          <Pressable style={styles.button} onPress={criarGrupo}>
+            <Text style={styles.buttonText}>Criar grupo</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Entrar com código</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Código do grupo"
+            value={codigo}
+            onChangeText={setCodigo}
+            autoCapitalize="characters"
+          />
+
+          <Pressable style={styles.button} onPress={entrarGrupo}>
+            <Text style={styles.buttonText}>Entrar no grupo</Text>
+          </Pressable>
+        </View>
+
+        {mensagem ? <Text style={styles.message}>{mensagem}</Text> : null}
+
+        <Text style={styles.title}>Meus grupos</Text>
+
+        {carregando ? (
+          <ActivityIndicator size="large" />
+        ) : grupos.length === 0 ? (
+          <Text style={styles.subtitle}>Você ainda não participa de grupos.</Text>
+        ) : (
+          grupos.map((grupo) => (
+            <View key={grupo.id} style={styles.card}>
+              <Text style={styles.cardTitle}>{grupo.nome}</Text>
+              <Text style={styles.cardText}>Código: {grupo.codigo}</Text>
+
+              <Pressable
+                style={styles.button}
+                onPress={() => {
+                  setGrupoRankingSelecionado(grupo);
+                  setTela("rankingGrupo");
+                }}
+              >
+                <Text style={styles.buttonText}>Ver ranking do grupo</Text>
+              </Pressable>
+            </View>
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function Ranking({ setTela, onLogout, grupoRankingSelecionado }) {
   const [ranking, setRanking] = useState([]);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/core/ranking`)
+    const url = grupoRankingSelecionado
+      ? `${API_URL}/core/ranking?grupo_id=${grupoRankingSelecionado.id}`
+      : `${API_URL}/core/ranking`;
+
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
@@ -1718,7 +1891,7 @@ function Ranking({ setTela, onLogout }) {
       })
       .catch((error) => console.log(error))
       .finally(() => setCarregando(false));
-  }, []);
+  }, [grupoRankingSelecionado]);
 
   function medalha(posicao) {
     if (posicao === 1) return "🥇";
@@ -1732,54 +1905,55 @@ function Ranking({ setTela, onLogout }) {
       <Header titulo="Ranking" onLogout={onLogout} />
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Pressable onPress={() => setTela("dashboard")}>
-          <Text style={styles.link}>← Voltar ao painel</Text>
+        <Pressable
+          onPress={() =>
+            grupoRankingSelecionado
+              ? setTela("gruposRanking")
+              : setTela("dashboard")
+          }
+        >
+          <Text style={styles.link}>← Voltar</Text>
         </Pressable>
 
-        <Text style={styles.title}>Ranking Geral</Text>
-        <Text style={styles.subtitle}>
-          Veja quem está liderando o bolão da Copa
+        <Text style={styles.title}>
+          {grupoRankingSelecionado
+            ? `Ranking - ${grupoRankingSelecionado.nome}`
+            : "Ranking Geral"}
         </Text>
+
+        {grupoRankingSelecionado ? (
+          <Text style={styles.subtitle}>
+            Código: {grupoRankingSelecionado.codigo}
+          </Text>
+        ) : null}
 
         {carregando ? (
           <ActivityIndicator size="large" />
         ) : ranking.length === 0 ? (
-          <Text style={styles.subtitle}>
-            Ainda não há participantes no ranking.
-          </Text>
+          <Text style={styles.subtitle}>Ainda não há participantes no ranking.</Text>
         ) : (
           ranking.map((item) => (
             <View key={item.posicao} style={styles.rankingCard}>
               <View style={styles.rankingPosition}>
-                <Text style={styles.rankingMedal}>
-                  {medalha(item.posicao)}
-                </Text>
+                <Text style={styles.rankingMedal}>{medalha(item.posicao)}</Text>
               </View>
 
               <View style={styles.rankingInfo}>
-                <Text style={styles.rankingUser}>
-                  {item.usuario}
-                </Text>
-
+                <Text style={styles.rankingUser}>{item.usuario}</Text>
                 <Text style={styles.rankingDetails}>
                   {item.palpites} palpites registrados
                 </Text>
                 <Text style={styles.rankingDetails}>
                   🎯 {item.placares_exatos} placares exatos
                 </Text>
-
                 <Text style={styles.rankingDetails}>
                   ✅ {item.vencedores_corretos} vencedores corretos
                 </Text>
               </View>
 
               <View style={styles.rankingPointsBox}>
-                <Text style={styles.rankingPoints}>
-                  {item.pontos}
-                </Text>
-                <Text style={styles.rankingPointsLabel}>
-                  pts
-                </Text>
+                <Text style={styles.rankingPoints}>{item.pontos}</Text>
+                <Text style={styles.rankingPointsLabel}>pts</Text>
               </View>
             </View>
           ))
@@ -1850,7 +2024,7 @@ export default function App() {
   const [grupoSelecionado, setGrupoSelecionado] = useState(null);
   const [adminFaseSelecionada, setAdminFaseSelecionada] = useState(null);
   const [adminGrupoSelecionado, setAdminGrupoSelecionado] = useState(null);
-
+  const [grupoRankingSelecionado, setGrupoRankingSelecionado] = useState(null);
   useEffect(() => {
     const tokenSalvo = localStorage.getItem("token");
     const usuarioSalvo = localStorage.getItem("usuario");
@@ -1958,17 +2132,43 @@ export default function App() {
   );
 }
     if (tela === "adminClassificacaoGrupo") {
+      return (
+        <AdminClassificacaoGrupo
+          setTela={setTela}
+          onLogout={fazerLogout}
+          token={token}
+          grupoSelecionado={adminGrupoSelecionado}
+        />
+      );
+    }
+    if (tela === "gruposRanking") {
     return (
-      <AdminClassificacaoGrupo
+      <GruposRanking
         setTela={setTela}
         onLogout={fazerLogout}
         token={token}
-        grupoSelecionado={adminGrupoSelecionado}
+        setGrupoRankingSelecionado={setGrupoRankingSelecionado}
+      />
+    );
+  }
+
+  if (tela === "rankingGrupo") {
+    return (
+      <Ranking
+        setTela={setTela}
+        onLogout={fazerLogout}
+        grupoRankingSelecionado={grupoRankingSelecionado}
       />
     );
   }
   if (tela === "ranking") {
-    return <Ranking setTela={setTela} onLogout={fazerLogout} />;
+    return (
+      <Ranking
+        setTela={setTela}
+        onLogout={fazerLogout}
+        grupoRankingSelecionado={null}
+      />
+    );
   }
   if (tela === "perfil") {
     return <Perfil setTela={setTela} onLogout={fazerLogout} token={token} />;

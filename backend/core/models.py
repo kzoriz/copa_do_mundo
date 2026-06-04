@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+import uuid
+from django.conf import settings
 
 User = get_user_model()
 
@@ -190,3 +192,42 @@ class ClassificacaoManualGrupo(models.Model):
 
     def __str__(self):
         return self.grupo.nome
+
+
+class GrupoRanking(models.Model):
+    nome = models.CharField(max_length=100)
+    codigo = models.CharField(max_length=12, unique=True, editable=False)
+    criador = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="grupos_ranking_criados"
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.codigo:
+            self.codigo = uuid.uuid4().hex[:8].upper()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.nome} ({self.codigo})"
+
+
+class ParticipanteGrupoRanking(models.Model):
+    grupo = models.ForeignKey(
+        GrupoRanking,
+        on_delete=models.CASCADE,
+        related_name="participantes"
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="grupos_ranking_participando"
+    )
+    entrou_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("grupo", "usuario")
+
+    def __str__(self):
+        return f"{self.usuario} em {self.grupo}"

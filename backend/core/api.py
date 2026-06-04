@@ -1,7 +1,7 @@
 from ninja import Router
 from typing import List
 from ninja import Schema
-from core.models import Partida, Palpite, Grupo, Fase, Time, ClassificacaoManualGrupo
+from core.models import Partida, Palpite, Grupo, Fase, Time, ClassificacaoManualGrupo, GrupoRanking, ParticipanteGrupoRanking
 from core.jwt_utils import obter_usuario_request
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
@@ -597,7 +597,7 @@ def meus_palpites(request):
     }
 
 @router.get("/ranking")
-def ranking(request):
+def ranking(request, grupo_id: int = None):
     usuarios = User.objects.annotate(
         total_pontos=Sum("palpites__pontos"),
         total_palpites=Count("palpites"),
@@ -611,7 +611,14 @@ def ranking(request):
         ),
     ).filter(
         total_palpites__gt=0
-    ).order_by(
+    )
+
+    if grupo_id:
+        usuarios = usuarios.filter(
+            grupos_ranking_participando__grupo_id=grupo_id
+        )
+
+    usuarios = usuarios.order_by(
         "-total_pontos",
         "-total_placares_exatos",
         "-total_vencedores_corretos",
@@ -1066,3 +1073,90 @@ def grupo_times(request, grupo_nome: str):
         ]
     }
 
+class GrupoRankingCriarSchema(Schema):
+    nome: str
+
+
+class EntrarGrupoRankingSchema(Schema):
+    codigo: str
+
+
+@router.post("/grupos-ranking")
+def criar_grupo_ranking(request, data: GrupoRankingCriarSchema):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {"success": False, "message": "Você precisa estar logado."}
+
+    grupo = GrupoRanking.objects.create(
+        nome=data.nome,
+        criador=usuario
+    )
+
+    ParticipanteGrupoRanking.objects.get_or_create(
+        grupo=grupo,
+        usuario=usuario
+    )
+
+    return {
+        "success": True,
+        "message": "Grupo criado com sucesso.",
+        "grupo": {
+            "id": grupo.id,
+            "nome": grupo.nome,
+            "codigo": grupo.codigo,
+        }
+    }
+
+
+@router.post("/grupos-ranking/entrar")
+def entrar_grupo_ranking(request, data: EntrarGrupoRankingSchema):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {"success": False, "message": "Você precisa estar logado."}
+
+    try:
+        grupo = GrupoRanking.objects.get(codigo=data.codigo.upper().strip())
+    except GrupoRanking.DoesNotExist:
+        return {"success": False, "message": "Grupo não encontrado."}
+
+    ParticipanteGrupoRanking.objects.get_or_create(
+        grupo=grupo,
+        usuario=usuario
+    )
+
+    return {
+        "success": True,
+        "message": f"Você entrou no grupo {grupo.nome}.",
+        "grupo": {
+            "id": grupo.id,
+            "nome": grupo.nome,
+            "codigo": grupo.codigo,
+        }
+    }
+
+
+@router.get("/grupos-ranking/meus")
+def meus_grupos_ranking(request):
+    usuario = obter_usuario_request(request)
+
+    if usuario is None:
+        return {"success": False, "message": "Você precisa estar logado."}
+
+    participacoes = ParticipanteGrupoRanking.objects.select_related(
+        "grupo"
+    ).filter(usuario=usuario).order_by("grupo__nome")
+
+    return {
+        "success": True,
+        "grupos": [
+            {
+                "id": p.grupo.id,
+                "nome": p.grupo.nome,
+                "codigo": p.grupo.codigo,
+                "criador": p.grupo.criador_id == usuario.id,
+            }
+            for p in participacoes
+        ]
+    }
