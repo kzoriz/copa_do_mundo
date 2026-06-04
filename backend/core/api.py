@@ -24,7 +24,16 @@ def vencedor_partida(partida):
     if partida.gols_fora > partida.gols_casa:
         return partida.time_fora
 
-    return None  # empate no mata-mata precisa de pênaltis futuramente
+    if partida.penaltis_casa is None or partida.penaltis_fora is None:
+        return None
+
+    if partida.penaltis_casa > partida.penaltis_fora:
+        return partida.time_casa
+
+    if partida.penaltis_fora > partida.penaltis_casa:
+        return partida.time_fora
+
+    return None
 
 CHAVEAMENTO_MATA_MATA = {
     # Lado esquerdo - Oitavas
@@ -55,16 +64,15 @@ CHAVEAMENTO_MATA_MATA = {
 }
 
 def perdedor_partida(partida):
-    if partida.gols_casa is None or partida.gols_fora is None:
+    vencedor = vencedor_partida(partida)
+
+    if vencedor is None:
         return None
 
-    if partida.gols_casa > partida.gols_fora:
+    if partida.time_casa_id == vencedor.id:
         return partida.time_fora
 
-    if partida.gols_fora > partida.gols_casa:
-        return partida.time_casa
-
-    return None
+    return partida.time_casa
 
 
 def atualizar_chaveamento_mata_mata():
@@ -551,6 +559,8 @@ def listar_partidas(request):
             "estadio": p.estadio,
             "gols_casa": p.gols_casa,
             "gols_fora": p.gols_fora,
+            "penaltis_casa": p.penaltis_casa,
+            "penaltis_fora": p.penaltis_fora,
         }
         for p in partidas
     ]
@@ -644,6 +654,8 @@ class ResultadoOficialSchema(Schema):
     partida_id: int
     gols_casa: int
     gols_fora: int
+    penaltis_casa: int | None = None
+    penaltis_fora: int | None = None
 
 
 @router.post("/resultado-oficial")
@@ -666,6 +678,30 @@ def salvar_resultado_oficial(request, data: ResultadoOficialSchema):
     partida.gols_casa = data.gols_casa
     partida.gols_fora = data.gols_fora
     partida.save(update_fields=["gols_casa", "gols_fora"])
+    partida.penaltis_casa = data.penaltis_casa
+    partida.penaltis_fora = data.penaltis_fora
+
+    if partida.fase.nome != "Fase de Grupos" and data.gols_casa == data.gols_fora:
+        if data.penaltis_casa is None or data.penaltis_fora is None:
+            return {
+                "success": False,
+                "message": "Informe o resultado dos pênaltis para jogo empatado no mata-mata."
+            }
+
+        if data.penaltis_casa == data.penaltis_fora:
+            return {
+                "success": False,
+                "message": "Os pênaltis não podem terminar empatados."
+            }
+    partida.save(
+        update_fields=[
+            "gols_casa",
+            "gols_fora",
+            "penaltis_casa",
+            "penaltis_fora",
+        ]
+    )
+
 
     for palpite in partida.palpites.all():
         palpite.pontos = palpite.calcular_pontos()

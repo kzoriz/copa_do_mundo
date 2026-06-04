@@ -92,6 +92,9 @@ class Partida(models.Model):
     gols_casa = models.IntegerField(null=True, blank=True)
     gols_fora = models.IntegerField(null=True, blank=True)
 
+    penaltis_casa = models.IntegerField(null=True, blank=True)
+    penaltis_fora = models.IntegerField(null=True, blank=True)
+
     class Meta:
         ordering = ["data_jogo"]
         unique_together = ("time_casa", "time_fora", "data_jogo")

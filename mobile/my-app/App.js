@@ -1526,7 +1526,12 @@ partidasFiltradas = [...partidasFiltradas].sort((a, b) => {
     </View>
   );
 }
-function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassificado }) {
+function CardResultadoAdmin({
+  jogo,
+  token,
+  onResultadoSalvo,
+  onDefinirClassificado,
+}) {
   const [golsCasa, setGolsCasa] = useState(
     jogo.gols_casa !== null ? String(jogo.gols_casa) : ""
   );
@@ -1535,13 +1540,45 @@ function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassifica
     jogo.gols_fora !== null ? String(jogo.gols_fora) : ""
   );
 
+  const [penaltisCasa, setPenaltisCasa] = useState(
+    jogo.penaltis_casa !== null && jogo.penaltis_casa !== undefined
+      ? String(jogo.penaltis_casa)
+      : ""
+  );
+
+  const [penaltisFora, setPenaltisFora] = useState(
+    jogo.penaltis_fora !== null && jogo.penaltis_fora !== undefined
+      ? String(jogo.penaltis_fora)
+      : ""
+  );
+
   const [mensagem, setMensagem] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  const ehMataMata = jogo.fase !== "Fase de Grupos";
+
+  const precisaPenaltis =
+    ehMataMata &&
+    golsCasa !== "" &&
+    golsFora !== "" &&
+    Number(golsCasa) === Number(golsFora);
 
   async function salvarResultado() {
     if (golsCasa === "" || golsFora === "") {
       setMensagem("Informe o resultado completo.");
       return;
+    }
+
+    if (precisaPenaltis) {
+      if (penaltisCasa === "" || penaltisFora === "") {
+        setMensagem("Informe o resultado dos pênaltis.");
+        return;
+      }
+
+      if (Number(penaltisCasa) === Number(penaltisFora)) {
+        setMensagem("Os pênaltis não podem terminar empatados.");
+        return;
+      }
     }
 
     setSalvando(true);
@@ -1558,6 +1595,8 @@ function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassifica
           partida_id: jogo.id,
           gols_casa: Number(golsCasa),
           gols_fora: Number(golsFora),
+          penaltis_casa: precisaPenaltis ? Number(penaltisCasa) : null,
+          penaltis_fora: precisaPenaltis ? Number(penaltisFora) : null,
         }),
       });
 
@@ -1566,7 +1605,6 @@ function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassifica
       if (data.success) {
         setMensagem("✅ Resultado salvo e chaveamento atualizado.");
 
-        // Aguarda exibir a mensagem antes de atualizar a lista
         if (onResultadoSalvo) {
           setTimeout(() => {
             onResultadoSalvo();
@@ -1632,9 +1670,7 @@ function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassifica
         Data: {new Date(jogo.data_jogo).toLocaleString("pt-BR")}
       </Text>
 
-      <Text style={styles.cardText}>
-        Local: {jogo.estadio}
-      </Text>
+      <Text style={styles.cardText}>Local: {jogo.estadio}</Text>
 
       <View style={styles.palpiteRow}>
         <TextInput
@@ -1657,6 +1693,37 @@ function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassifica
           placeholderTextColor="#94A3B8"
         />
       </View>
+
+      {precisaPenaltis ? (
+        <>
+          <Text style={[styles.cardText, { textAlign: "center", fontWeight: "bold" }]}>
+            Decisão por pênaltis
+          </Text>
+
+          <View style={styles.palpiteRow}>
+            <TextInput
+              style={styles.scoreInput}
+              value={penaltisCasa}
+              onChangeText={setPenaltisCasa}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor="#94A3B8"
+            />
+
+            <Text style={styles.xText}>x</Text>
+
+            <TextInput
+              style={styles.scoreInput}
+              value={penaltisFora}
+              onChangeText={setPenaltisFora}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor="#94A3B8"
+            />
+          </View>
+        </>
+      ) : null}
+
       {jogo.time_casa === "A definir" ? (
         <Pressable
           style={styles.secondaryButton}
@@ -1678,6 +1745,7 @@ function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassifica
           </Text>
         </Pressable>
       ) : null}
+
       {mensagem ? (
         <Text
           style={
@@ -1691,17 +1759,12 @@ function CardResultadoAdmin({ jogo, token, onResultadoSalvo, onDefinirClassifica
       ) : null}
 
       <Pressable
-        style={[
-          styles.button,
-          salvando && styles.disabledButton,
-        ]}
+        style={[styles.button, salvando && styles.disabledButton]}
         onPress={salvarResultado}
         disabled={salvando}
       >
         <Text style={styles.buttonText}>
-          {salvando
-            ? "Salvando..."
-            : "Salvar resultado oficial"}
+          {salvando ? "Salvando..." : "Salvar resultado oficial"}
         </Text>
       </Pressable>
     </View>
